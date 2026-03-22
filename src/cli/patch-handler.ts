@@ -1,18 +1,20 @@
 /**
  * patch-handler.ts — parses natural language into patch actions.
  *
- * Two-layer patch model (CURRENT):
- *   session patch    — applied to ActiveStrategy in memory; no confirmation needed
- *   persistent change — modifies intent JSON; structured preview + y/n confirmation
+ * Change flow:
+ *   preview-first (default) → structured preview → y/n confirm → apply
+ *   session (explicit "这轮"/"先"/"暂时"/"临时") → immediate, no preview
  *
- * Classification rules (current live behavior):
- *   "这轮" "先" "暂时" "临时" | "just this" "for now" "temporarily"  → session patch
- *   "从现在起" "永久" "一直" "以后都" | "from now on" "permanently" "always" → persistent change
- *   (no signal word)  → session patch  (current default; no preview)
+ * Field routing:
+ *   relevanceThreshold → persistent preview by default; session if marker present
+ *   excludeTags        → persistent preview (no session path; nudge toward persistent)
+ *   focus             → session immediate only (persistent path: use includeTags)
+ *   sourceBias        → always session immediate (no persistent equivalent yet)
  *
- * Target (not yet wired — see design.md):
- *   Persistent change should become the primary path with:
- *     draft -> structured preview -> refine/rewrite -> confirm (y/n) -> apply
+ * Classification rules:
+ *   "这轮" "先" "暂时" "临时" | "just this" "for now" "temporarily"  → session
+ *   "从现在起" "永久" "一直" "以后都" | "from now on" "permanently" "always" → persistent
+ *   (no signal word, for relevant fields) → persistent (preview-first)
  */
 
 import * as fs from "fs"
@@ -81,22 +83,51 @@ export type PatchAction =
   | { type: "no_op"; message: string }
   | { type: "unrecognized"; message: string }
 
+/** Returns true if the input contains an explicit session-scope marker. */
+function hasSessionMarker(text: string): boolean {
+  return SESSION_MARKERS.some(m => text.includes(m))
+}
+
 export function buildPatchAction(
   text: string,
   intent: RadarIntent,
   strategyManager: ActiveStrategyManager,
   intentPath: string
 ): PatchAction {
-  const classification = classifyPatch(text)
   const parsed = parsePatchIntent(text)
 
   if (!parsed.field) {
     return { type: "unrecognized", message: "(未能识别修改意图，请重新描述。支持: 聚焦方向 / 相关度门槛 / 暂停source / 排除标签)" }
   }
 
-  // ── Session patches ─────────────────────────────────────────────────────
+  // ── Field-level routing ───────────────────────────────────────────────────
+  //
+  // Rules per field:
+  //   sourceBias         → always session immediate (no persistent equivalent yet)
+  //   relevanceThreshold → persistent preview by default; session if explicit marker
+  //   focus             → session immediate only (persistent path: includeTags, see nudge)
+  //   excludeTags       → persistent preview (no session path; nudge toward persistent)
 
-  if (classification === "session") {
+  // sourceBias: always immediate session (no persistent equivalent in SearchContext yet)
+  if (parsed.field === "sourceBias") {
+    const bias = parsed.value as { action: "pause" | "boost"; sourceId: string }
+    strategyManager.applySourceBias(bias, text)
+    return {
+      type: "session_applied",
+      message: [
+        `Session patch:`,
+        `  sourceBias → ${bias.action} ${bias.sourceId}`,
+        `  有效范围: 本次会话`,
+        ``,
+        `已应用。`,
+      ].join("\n"),
+    }
+  }
+
+  const isSession = hasSessionMarker(text)
+
+  // ── Session path (explicit session marker) ────────────────────────────────
+  if (isSession) {
     if (parsed.field === "focus") {
       const focusVal = parsed.value as string
       strategyManager.applyFocus(focusVal, text)
@@ -116,29 +147,12 @@ export function buildPatchAction(
 
     if (parsed.field === "relevanceThreshold") {
       const val = parsed.value as number
-      const intentDefault = intent.commercialCriteria.minRelevanceScore ?? 0.4
       strategyManager.applyRelevanceThreshold(val, text)
       return {
         type: "session_applied",
         message: [
           `Session patch:`,
           `  relevanceThreshold → ${val}`,
-          `  (Intent 默认值: ${intentDefault}, 不受影响)`,
-          `  有效范围: 本次会话`,
-          ``,
-          `已应用。如需永久保存，请说"保存为长期配置"。`,
-        ].join("\n"),
-      }
-    }
-
-    if (parsed.field === "sourceBias") {
-      const bias = parsed.value as { action: "pause" | "boost"; sourceId: string }
-      strategyManager.applySourceBias(bias, text)
-      return {
-        type: "session_applied",
-        message: [
-          `Session patch:`,
-          `  sourceBias → ${bias.action} ${bias.sourceId}`,
           `  有效范围: 本次会话`,
           ``,
           `已应用。`,
@@ -146,7 +160,6 @@ export function buildPatchAction(
       }
     }
 
-    // excludeTags with session classification — nudge toward persistent
     if (parsed.field === "excludeTags") {
       return {
         type: "no_op",
@@ -155,75 +168,70 @@ export function buildPatchAction(
     }
   }
 
-  // ── Persistent changes ──────────────────────────────────────────────────
+  // ── Persistent path (default for relevanceThreshold, excludeTags) ─────────
+  if (parsed.field === "relevanceThreshold") {
+    const val = parsed.value as number
+    const currentVal = intent.commercialCriteria.minRelevanceScore ?? 0.4
+    const preview = [
+      `Persistent change:`,
+      `  commercialCriteria.minRelevanceScore: ${currentVal} → ${val}`,
+      `  将写入 ${intentPath}`,
+      ``,
+      `确认写入？(y/n)`,
+    ].join("\n")
 
-  if (classification === "persistent") {
-    if (parsed.field === "excludeTags") {
-      const newTag = (parsed.value as string).replace(/['"]/g, "").trim()
-      const currentTags = intent.commercialCriteria.excludeTags ?? []
-
-      if (currentTags.includes(newTag)) {
-        return { type: "no_op", message: `"${newTag}" 已在 excludeTags 中，无需变更。` }
-      }
-
-      const newTags = [...currentTags, newTag]
-      const preview = [
-        `Persistent change:`,
-        `  commercialCriteria.excludeTags: [${currentTags.map(t => `"${t}"`).join(", ")}] → [${newTags.map(t => `"${t}"`).join(", ")}]`,
-        `  将写入 ${intentPath}`,
-        ``,
-        `确认写入？(y/n)`,
-      ].join("\n")
-
-      const onConfirm = (): string => {
-        const raw = JSON.parse(fs.readFileSync(intentPath, "utf-8"))
-        raw.commercialCriteria.excludeTags = newTags
-        fs.writeFileSync(intentPath, JSON.stringify(raw, null, 2) + "\n")
-        // Mutate intent in place so caller's reference is updated
-        intent.commercialCriteria.excludeTags = newTags
-        return `已写入。excludeTags 现在包含: ${newTags.join(", ")}`
-      }
-
-      const onCancel = (): string => "已取消。Intent 未变更。"
-
-      return { type: "persistent_confirm", preview, onConfirm, onCancel }
+    const onConfirm = (): string => {
+      const raw = JSON.parse(fs.readFileSync(intentPath, "utf-8"))
+      raw.commercialCriteria.minRelevanceScore = val
+      fs.writeFileSync(intentPath, JSON.stringify(raw, null, 2) + "\n")
+      intent.commercialCriteria.minRelevanceScore = val
+      return `已写入。minRelevanceScore 现在为: ${val}`
     }
 
-    // Persistent focus/threshold — write to intent JSON
-    if (parsed.field === "focus") {
-      const val = parsed.value as string
-      const preview = [
-        `Persistent change:`,
-        `  (注意: focus 是 session 级概念，Intent 没有 focus 字段)`,
-        `  如需永久缩窄范围，请改写 commercialCriteria.includeTags`,
-        ``,
-        `建议: 直接说"从现在起 includeTags 只保留 ${val}"`,
-      ].join("\n")
-      return { type: "no_op", message: preview }
+    const onCancel = (): string => "已取消。Intent 未变更。"
+    return { type: "persistent_confirm", preview, onConfirm, onCancel }
+  }
+
+  if (parsed.field === "excludeTags") {
+    const newTag = (parsed.value as string).replace(/['"]/g, "").trim()
+    const currentTags = intent.commercialCriteria.excludeTags ?? []
+
+    if (currentTags.includes(newTag)) {
+      return { type: "no_op", message: `"${newTag}" 已在 excludeTags 中，无需变更。` }
     }
 
-    if (parsed.field === "relevanceThreshold") {
-      const val = parsed.value as number
-      const currentVal = intent.commercialCriteria.minRelevanceScore ?? 0.4
-      const preview = [
-        `Persistent change:`,
-        `  commercialCriteria.minRelevanceScore: ${currentVal} → ${val}`,
-        `  将写入 ${intentPath}`,
-        ``,
-        `确认写入？(y/n)`,
-      ].join("\n")
+    const newTags = [...currentTags, newTag]
+    const preview = [
+      `Persistent change:`,
+      `  commercialCriteria.excludeTags: [${currentTags.map(t => `"${t}"`).join(", ")}] → [${newTags.map(t => `"${t}"`).join(", ")}]`,
+      `  将写入 ${intentPath}`,
+      ``,
+      `确认写入？(y/n)`,
+    ].join("\n")
 
-      const onConfirm = (): string => {
-        const raw = JSON.parse(fs.readFileSync(intentPath, "utf-8"))
-        raw.commercialCriteria.minRelevanceScore = val
-        fs.writeFileSync(intentPath, JSON.stringify(raw, null, 2) + "\n")
-        intent.commercialCriteria.minRelevanceScore = val
-        return `已写入。minRelevanceScore 现在为: ${val}`
-      }
-
-      const onCancel = (): string => "已取消。Intent 未变更。"
-      return { type: "persistent_confirm", preview, onConfirm, onCancel }
+    const onConfirm = (): string => {
+      const raw = JSON.parse(fs.readFileSync(intentPath, "utf-8"))
+      raw.commercialCriteria.excludeTags = newTags
+      fs.writeFileSync(intentPath, JSON.stringify(raw, null, 2) + "\n")
+      intent.commercialCriteria.excludeTags = newTags
+      return `已写入。excludeTags 现在包含: ${newTags.join(", ")}`
     }
+
+    const onCancel = (): string => "已取消。Intent 未变更。"
+
+    return { type: "persistent_confirm", preview, onConfirm, onCancel }
+  }
+
+  // focus — no persistent path yet; nudge toward includeTags
+  if (parsed.field === "focus") {
+    const val = parsed.value as string
+    const preview = [
+      `Focus 是 session 级概念，Intent 没有 focus 字段。`,
+      ``,
+      `如需永久缩窄范围，请改写 commercialCriteria.includeTags。`,
+      `建议: 直接说"从现在起 includeTags 只保留 ${val}"`,
+    ].join("\n")
+    return { type: "no_op", message: preview }
   }
 
   return { type: "unrecognized", message: `(暂不支持该操作)` }
