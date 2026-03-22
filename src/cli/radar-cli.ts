@@ -152,6 +152,7 @@ async function main(): Promise<void> {
         // Load persistent context objects for this run
         const searchCtx = searchContextStore.load(intentId) ?? undefined
         const kpack = knowledgePackStore.load(intentId) ?? undefined
+        const charter = meetingCharterStore.load(intentId) ?? undefined
 
         const result = await runPipeline({
           intent,
@@ -174,7 +175,9 @@ async function main(): Promise<void> {
           knowledgePack: kpack
             ? { productCapabilities: kpack.productCapabilities.map(c => c.capability), knownLimitations: kpack.knownLimitations, verticalContext: kpack.verticalContext }
             : {},
-          meetingCharter: {},
+          meetingCharter: charter
+            ? { objective: charter.objective, primaryLens: charter.primaryLens, requiredQuestions: charter.requiredQuestions.map(q => q.question) }
+            : {},
           pipelineStats: {
             ingested: result.ingested,
             scored: result.scored,
@@ -209,7 +212,9 @@ async function main(): Promise<void> {
           knowledgePack: kpack
             ? { productCapabilities: kpack.productCapabilities.map(c => c.capability), knownLimitations: kpack.knownLimitations, verticalContext: kpack.verticalContext }
             : {},
-          meetingCharter: {},
+          meetingCharter: charter
+            ? { objective: charter.objective, primaryLens: charter.primaryLens, requiredQuestions: charter.requiredQuestions.map(q => q.question) }
+            : {},
         }
         lastRunStore.save(summary)
         console.log(`\nDone. ${result.ingested} ingested → ${result.scored} scored → ${result.approved} approved → ${result.opportunities} opportunities`)

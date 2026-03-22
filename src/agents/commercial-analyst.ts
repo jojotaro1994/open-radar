@@ -22,11 +22,9 @@
 import type { ScoredSignal } from "../adapters/source-adapter.js"
 import type { RadarIntent } from "../schemas/intent.js"
 import type { CommercialAssessment, AssessmentCategory } from "../schemas/commercial-assessment.js"
-import type { Attribution } from "../schemas/attribution.js"
 import type { KnowledgePack } from "../state/knowledge-pack.js"
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY ?? "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"
 const OPENROUTER_MODELS = (
   process.env.OPENROUTER_BRIEF_MODELS ?? "arcee-ai/trinity-large-preview:free,stepfun/step-3.5-flash:free"
 ).split(",")
@@ -154,6 +152,20 @@ Assess this signal.`
     modelId: string
   }> {
     let lastError = ""
+    const apiKey = process.env.OPENROUTER_API_KEY
+
+    if (!apiKey) {
+      return {
+        commercialRelevance: false,
+        category: "noise",
+        reasoning: "LLM assessment unavailable: OPENROUTER_API_KEY is not set.",
+        confidence: 0.1,
+        opportunityScore: 0.0,
+        verticalTags: [],
+        missingEvidence: ["OPENROUTER_API_KEY not configured"],
+        modelId: "fallback",
+      }
+    }
 
     for (const model of OPENROUTER_MODELS) {
       const controller = new AbortController()
@@ -164,7 +176,7 @@ Assess this signal.`
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+            "Authorization": `Bearer ${apiKey}`,
           },
           body: JSON.stringify({
             model: model.trim(),
