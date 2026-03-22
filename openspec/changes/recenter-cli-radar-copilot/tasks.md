@@ -60,22 +60,27 @@
 
 ## Task 3 — Make persistent preview/refine/confirm/apply the only main change flow
 **Priority: P1**
-**Status: PARTIAL — persistent path has preview, session path goes immediate**
+**Status: PARTIAL — key fields now preview-first**
 
-当前实现：
+已交付：
 
-- Persistent path (`excludeTags`, `minRelevanceScore`) → `persistent_confirm` 类型 → structured preview + y/n ✅
-- Session path → immediate apply, no preview ⚠️
+- `relevanceThreshold` → persistent preview by default (structured preview + y/n) ✅
+- `sourceBias` → always session immediate (no persistent equivalent yet) ✅
+- `excludeTags` → persistent preview (unchanged) ✅
 
-问题：
+当前行为：
 
-- `classifyPatch` 默认返回 “session”，无 preview
-- `(no signal word)` → session（当前行为），目标应为 persistent
+- `relevanceThreshold` 无 marker → persistent preview + y/n
+- `relevanceThreshold` + “这轮”/”先”/etc. → session immediate
+- `excludeTags` → persistent preview + y/n
+- `sourceBias` → always session immediate
+- `focus` → session immediate only (persistent path: use includeTags)
 
-待决定：
+未完全交付：
 
-- 是否需要把 session patch 也加上 preview 步骤（会改变兼容性行为）
-- 或明确 session = immediate 是设计决定，不改
+- `focus` 方向的 persistent path 尚未完全支持（当前 nudges toward includeTags）
+- Task 3 要求”make persistent ... the ONLY main long-lived change flow” — session path
+  仍然存在用于兼容性（focus、sourceBias 等场景）
 
 ## Task 4 — Align CLI `/state` with the new object model
 **Priority: P1**
