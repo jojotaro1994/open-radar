@@ -114,9 +114,20 @@ ActiveStrategy 显示为 `── Active Strategy (session overlay) ──`， su
 
 ## Task 6 — Lay the data/context foundation for `/review` and `/why`
 **Priority: P2**
-**Status: NOT STARTED**
+**Status: PARTIAL — RunContext store and pipeline wiring done**
 
-范围限定为基础铺垫，不要求完整实现。
+已交付：
+
+- `RunContextStore` — 持久化 `data/run-contexts/{cycleId}.json`，每个 cycle 保存完整快照 ✅
+- `LastRunSummary` 扩展 — 包含 `searchContext`/`knowledgePack`/`meetingCharter` summaries ✅
+- `radar-cli.ts` `/run` — 加载 SearchContext + KnowledgePack 并传入 pipeline；pipeline 完成后保存 RunContext ✅
+- `/run` 现在通过 `searchContext`/`knowledgePack` 参数将 CLI 层的 context 传入 pipeline ✅
+
+未交付（完整 /review 和 /why 能力）：
+
+- `/why {signalId}` 命令本身尚未实现（需要通过 cycleId 查询 RunContext + triage 记录）
+- `/review` 命令本身尚未实现
+- 但数据层基础已铺设：任何 future 实现都可以通过 cycleId 查到完整 RunContext
 
 ## Task 7 — Deprecate session-first framing in docs and code paths
 **Priority: P2**
