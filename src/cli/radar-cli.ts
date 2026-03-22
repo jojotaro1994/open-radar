@@ -23,12 +23,16 @@ import type { RadarIntent } from "../schemas/intent.js"
 import type { LastRunSummary } from "../state/last-run.js"
 import { ActiveStrategyManager } from "../state/active-strategy.js"
 import { LastRunStore } from "../state/last-run.js"
+import { SearchContextStore } from "../state/search-context-store.js"
+import { KnowledgePackStore } from "../state/knowledge-pack-store.js"
+import { MeetingCharterStore } from "../state/meeting-charter-store.js"
 import { printState } from "../state/state-printer.js"
 import { buildPatchAction } from "./patch-handler.js"
 import { runPipeline } from "../orchestrator/run-pipeline.js"
 import { inferDefaultSourceRole } from "../state/source-role.js"
 
 const DATA_DIR = process.env.RADAR_DATA_DIR ?? path.join(process.cwd(), "data")
+const CONFIG_DIR = path.join(process.cwd(), "config")
 
 function loadIntent(intentId: string): RadarIntent {
   const intentPath = path.join(process.cwd(), "config", "intents", `${intentId}.json`)
@@ -47,6 +51,9 @@ async function main(): Promise<void> {
   let intent = loadIntent(intentId)
   const strategyManager = new ActiveStrategyManager()
   const lastRunStore = new LastRunStore(DATA_DIR)
+  const searchContextStore = new SearchContextStore(CONFIG_DIR)
+  const knowledgePackStore = new KnowledgePackStore(CONFIG_DIR)
+  const meetingCharterStore = new MeetingCharterStore(CONFIG_DIR)
   let running = false
 
   const rl = readline.createInterface({
@@ -96,7 +103,23 @@ async function main(): Promise<void> {
     }
 
     if (line === "/state") {
-      printState(intent, strategyManager.get(), lastRunStore.load())
+      const searchCtx = searchContextStore.load(intentId)
+      const kpack = knowledgePackStore.load(intentId)
+      const charter = meetingCharterStore.load(intentId)
+      printState(
+        intent,
+        strategyManager.get(),
+        lastRunStore.load(),
+        searchCtx
+          ? { sourceWeights: Object.fromEntries(searchCtx.sourceWeights.map(w => [w.sourceId, w.weight])), topicBoosts: searchCtx.topicBoosts.map(b => b.term), topicSuppressions: searchCtx.topicSuppressions, recallMode: searchCtx.recallMode }
+          : {},
+        kpack
+          ? { productCapabilities: kpack.productCapabilities.map(c => c.capability), knownLimitations: kpack.knownLimitations, verticalContext: kpack.verticalContext }
+          : {},
+        charter
+          ? { objective: charter.objective, primaryLens: charter.primaryLens, requiredQuestions: charter.requiredQuestions.map(q => q.question) }
+          : {}
+      )
       rl.prompt()
       return
     }

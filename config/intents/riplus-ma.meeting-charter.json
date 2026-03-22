@@ -1,0 +1,13 @@
+{
+  "$schema": "../../../src/state/meeting-charter.schema.json",
+  "id": "riplus-ma-charter",
+  "intentId": "riplus-ma",
+  "objective": "",
+  "primaryLens": "",
+  "requiredQuestions": [],
+  "avoidOverweighting": [],
+  "decisionStyle": "balanced",
+  "meetingNotes": "",
+  "createdAt": "",
+  "updatedAt": ""
+}

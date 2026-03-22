@@ -1,0 +1,13 @@
+{
+  "$schema": "../../../src/state/search-context.schema.json",
+  "id": "riplus-ma-search",
+  "intentId": "riplus-ma",
+  "sourceWeights": [],
+  "topicBoosts": [],
+  "topicSuppressions": [],
+  "recallMode": "normal",
+  "noiseTolerance": 0.5,
+  "searchNotes": "",
+  "createdAt": "",
+  "updatedAt": ""
+}
