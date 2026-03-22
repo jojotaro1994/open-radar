@@ -98,12 +98,19 @@ ActiveStrategy 显示为 `── Active Strategy (session overlay) ──`， su
 
 ## Task 5 — Make `/run` read long-lived context objects
 **Priority: P1**
-**Status: NOT STARTED**
+**Status: PARTIAL — SearchContext + KnowledgePack wired; MeetingCharter pending**
 
-待做：
+已交付：
 
-- `run-pipeline.ts` 的 `PipelineOptions` 增加 SearchContext / KnowledgePack / Meeting Charter 参数
-- pipeline 中这些对象如何影响 scoring/qualification/discussion framing（设计文档待定）
+- `PipelineOptions` 增加 `searchContext?: SearchContext` 和 `knowledgePack?: KnowledgePack` ✅
+- `SearchContext.sourceWeights` 在 adapter 选择阶段应用：weight=0 的 source 被 suppress ✅
+- `KnowledgePack.opportunityHeuristics` 通过 `buildVerticalContext` 注入 LLM prompt ✅
+- `commercial-analyst.ts` `batchAssess` 签名扩展为接受 `knowledgePack` ✅
+
+未交付：
+
+- `MeetingCharter` 尚未 runtime 接入（影响 post-triage explanation/review framing）
+- `SearchContext.topicBoosts` / `topicSuppressions` / `recallMode` 尚未影响 scoring/qualification
 
 ## Task 6 — Lay the data/context foundation for `/review` and `/why`
 **Priority: P2**
