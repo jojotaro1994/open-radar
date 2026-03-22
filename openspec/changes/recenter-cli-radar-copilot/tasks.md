@@ -120,7 +120,7 @@ ActiveStrategy 显示为 `── Active Strategy (session overlay) ──`， su
 
 ## Task 7 — Deprecate session-first framing in docs and code paths
 **Priority: P2**
-**Status: PARTIAL — 主文件已更正**
+**Status: DONE ✅**
 
 已完成：
 
@@ -128,6 +128,7 @@ ActiveStrategy 显示为 `── Active Strategy (session overlay) ──`， su
 - `state-printer.ts` → 五段落结构 + ActiveStrategy subordinate 标注
 - `patch-handler.ts` → comment 正确反映当前行为
 - `run-pipeline.ts` header → reality-aligned
+- Runner files (`*-runner.ts`) checked — 无旧 session-first framing
 
 未完成：
 
