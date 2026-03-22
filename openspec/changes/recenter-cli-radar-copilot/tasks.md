@@ -2,7 +2,7 @@
 
 ## Task 1 — Review current implementation and fix drift against current product direction
 **Priority: P0**
-**Status: DONE** ✅
+**Status: PARTIAL — review complete, acceptance baseline not yet green**
 
 目标：
 
@@ -19,13 +19,18 @@
 - [x] preview/refine/confirm/apply 语义是否清晰 → persistent path 有 structured preview + y/n，comment 已对齐
 - [x] search / knowledge / meeting 是否混成一层 → 三层已分离为独立 interface
 
-交付（已完成）：
+交付（review/output 已完成）：
 
 - [x] concise implementation review → Round 1 输出
 - [x] drift list → D1-D7 记录，D1/D2/D7 已修复，D3-D6 记录为已知 gap
 - [x] file-by-file mapping → Round 1 输出
 - [x] minimal first-fix plan → Round 1 输出
-- [x] minimal low-risk code corrections only where drift is already obvious → 4 个文件已更正
+- [x] minimal low-risk code corrections only where drift is already obvious → 已开始执行
+
+Acceptance blockers:
+
+- `npm run build` 必须为绿；当前 adapter schema 兼容问题仍是阻塞项
+- docs/task status 不能超过真实 wiring 进度
 
 **Remaining open drift (documented, not blocking):**
 - D3: Session patches go immediate without structured preview — architectural gap, persistent path already has preview
@@ -34,7 +39,7 @@
 
 ## Task 2 — Introduce top-level persistent object model
 **Priority: P1**
-**Status: PARTIAL — structure done, not yet in pipeline runtime**
+**Status: PARTIAL — structure done, only part of runtime wired**
 
 目标：
 把新的主模型正式引入设计和配置层：
@@ -56,11 +61,11 @@
 
 未交付（后续任务）：
 
-- pipeline 运行时实际读取 SearchContext/KnowledgePack/MeetingCharter（Task 5）
+- pipeline 运行时完整读取 SearchContext/KnowledgePack/MeetingCharter（Task 5）
 
 ## Task 3 — Make persistent preview/refine/confirm/apply the only main change flow
 **Priority: P1**
-**Status: PARTIAL — key fields now preview-first**
+**Status: PARTIAL — preview-first only covers a subset of fields**
 
 已交付：
 
@@ -98,7 +103,7 @@ ActiveStrategy 显示为 `── Active Strategy (session overlay) ──`， su
 
 ## Task 5 — Make `/run` read long-lived context objects
 **Priority: P1**
-**Status: PARTIAL — SearchContext + KnowledgePack wired; MeetingCharter pending**
+**Status: PARTIAL — SearchContext + KnowledgePack partially wired; MeetingCharter snapshot-only**
 
 已交付：
 
@@ -106,22 +111,23 @@ ActiveStrategy 显示为 `── Active Strategy (session overlay) ──`， su
 - `SearchContext.sourceWeights` 在 adapter 选择阶段应用：weight=0 的 source 被 suppress ✅
 - `KnowledgePack.opportunityHeuristics` 通过 `buildVerticalContext` 注入 LLM prompt ✅
 - `commercial-analyst.ts` `batchAssess` 签名扩展为接受 `knowledgePack` ✅
+- `/run` 现在加载 MeetingCharter 并把真实 summary 写入 `LastRunSummary` / `RunContext` ✅
 
 未交付：
 
-- `MeetingCharter` 尚未 runtime 接入（影响 post-triage explanation/review framing）
+- `MeetingCharter` 尚未影响 pipeline 运行语义（仅 snapshot/wiring truth）
 - `SearchContext.topicBoosts` / `topicSuppressions` / `recallMode` 尚未影响 scoring/qualification
 
 ## Task 6 — Lay the data/context foundation for `/review` and `/why`
 **Priority: P2**
-**Status: PARTIAL — RunContext store and pipeline wiring done**
+**Status: PARTIAL — RunContext store and snapshot wiring done**
 
 已交付：
 
 - `RunContextStore` — 持久化 `data/run-contexts/{cycleId}.json`，每个 cycle 保存完整快照 ✅
 - `LastRunSummary` 扩展 — 包含 `searchContext`/`knowledgePack`/`meetingCharter` summaries ✅
-- `radar-cli.ts` `/run` — 加载 SearchContext + KnowledgePack 并传入 pipeline；pipeline 完成后保存 RunContext ✅
-- `/run` 现在通过 `searchContext`/`knowledgePack` 参数将 CLI 层的 context 传入 pipeline ✅
+- `radar-cli.ts` `/run` — 加载 SearchContext + KnowledgePack + MeetingCharter，并在 pipeline 完成后保存真实快照 ✅
+- `/run` 现在通过 `searchContext`/`knowledgePack` 参数将 CLI 层的 context 传入 pipeline；MeetingCharter 目前保存快照但未进入 pipeline 语义 ✅
 
 未交付（完整 /review 和 /why 能力）：
 
@@ -151,6 +157,43 @@ ActiveStrategy 显示为 `── Active Strategy (session overlay) ──`， su
 说明：
 
 - 现在不要先恢复一整套 spec
+
+## Task 9 — Single-intent safe adapter catalog
+**Priority: P1**
+**Status: DONE ✅**
+
+目标（来自 adapter-pluggability-proposal.md）：
+
+- 引入 config-driven adapter catalog
+- registry bootstrap 只注册 catalog-enabled 的 adapter
+- sourcePriority 为空时返回安全空集，不回退到全部 adapter
+- Search Context 不得越权激活 intent allow-list 之外的 adapter
+
+已交付：
+
+- `config/adapter-catalog.json` — 所有已知 adapter 的清单，`enabled` 标志控制可用性
+  - enabled: jira-rr ✅, jira-ma ✅, confluence ✅, github-discussions ✅
+  - enabled: hackernews ✅, riplus-insurance-travel ✅
+- `src/registry/adapter-catalog.ts` — catalog 加载模块，`isAdapterEnabled()`, `getEnabledAdapters()`
+- `src/registry/register-all.ts` — 改为只注册 catalog 中 enabled=true 的 adapter
+- `src/registry/source-registry.ts` — `listForIntent()` 修复：
+  - sourcePriority 为空 → 返回安全空集 `[]`（不再回退到全部已注册 adapter）
+  - 日志明确说明 intent sourcePriority 为空时返回空集
+- `src/registry/catalog-validate.ts` — 手动验证脚本，证明四个安全保证
+
+安全保证验证结果：
+
+- ✓ enabled adapter 可被 intent 使用（riplus-insurance-travel）
+- ✓ disabled adapter 不可用（jira-ma, confluence, github-discussions）
+- ✓ sourcePriority 为空 → 返回 `[]`（不是全部 adapter）
+- ✓ SearchContext 不得激活 intent allow-list 之外的 adapter
+
+验收标准（来自 proposal）：
+
+- ✅ 删除或禁用 adapter 后不再出现在可选列表
+- ✅ 新 intent 不会因为历史注册表自动带上旧 adapter
+- ✅ `default` intent 不再自动吸纳全部 adapter
+- ✅ SearchContext 只能作用于 intent 已允许的 adapter
+
 - 避免把 target state 冒充成 current truth
 - 等核心设计和实现稳定后再补 OpenSpec
-
