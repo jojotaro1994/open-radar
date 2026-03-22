@@ -26,6 +26,7 @@ import { LastRunStore } from "../state/last-run.js"
 import { SearchContextStore } from "../state/search-context-store.js"
 import { KnowledgePackStore } from "../state/knowledge-pack-store.js"
 import { MeetingCharterStore } from "../state/meeting-charter-store.js"
+import { RunContextStore } from "../state/run-context-store.js"
 import { printState } from "../state/state-printer.js"
 import { buildPatchAction } from "./patch-handler.js"
 import { runPipeline } from "../orchestrator/run-pipeline.js"
@@ -54,6 +55,7 @@ async function main(): Promise<void> {
   const searchContextStore = new SearchContextStore(CONFIG_DIR)
   const knowledgePackStore = new KnowledgePackStore(CONFIG_DIR)
   const meetingCharterStore = new MeetingCharterStore(CONFIG_DIR)
+  const runContextStore = new RunContextStore(DATA_DIR)
   let running = false
 
   const rl = readline.createInterface({
@@ -147,12 +149,45 @@ async function main(): Promise<void> {
       running = true
       console.log(`\nExecuting pipeline — intent=${intentId}...`)
       try {
+        // Load persistent context objects for this run
+        const searchCtx = searchContextStore.load(intentId) ?? undefined
+        const kpack = knowledgePackStore.load(intentId) ?? undefined
+
         const result = await runPipeline({
           intent,
           dataDir: DATA_DIR,
           strategy: strategyManager.get(),
           useCommercialAnalyst: process.env.USE_COMMERCIAL_ANALYST === "true",
+          searchContext: searchCtx,
+          knowledgePack: kpack,
         })
+
+        // Save RunContext snapshot for explainability (/review, /why)
+        const cycleId = result.cycleId
+        runContextStore.save({
+          cycleId,
+          timestamp: new Date().toISOString(),
+          intentId: intent.id,
+          searchContext: searchCtx
+            ? { sourceWeights: Object.fromEntries(searchCtx.sourceWeights.map(w => [w.sourceId, w.weight])), topicBoosts: searchCtx.topicBoosts.map(b => b.term), topicSuppressions: searchCtx.topicSuppressions, recallMode: searchCtx.recallMode }
+            : {},
+          knowledgePack: kpack
+            ? { productCapabilities: kpack.productCapabilities.map(c => c.capability), knownLimitations: kpack.knownLimitations, verticalContext: kpack.verticalContext }
+            : {},
+          meetingCharter: {},
+          pipelineStats: {
+            ingested: result.ingested,
+            scored: result.scored,
+            qualified: result.qualifiedCount,
+            enqueuedForTriage: result.enqueuedForTriage,
+            approved: result.approved,
+            rejected: result.rejected,
+            deferred: result.deferred,
+            themes: result.themes,
+            opportunities: result.opportunities,
+          },
+        })
+
         const summary: LastRunSummary = {
           timestamp: new Date().toISOString(),
           intentId: intent.id,
@@ -168,6 +203,13 @@ async function main(): Promise<void> {
             qualified: result.qualifiedCount,
             enqueuedForTriage: result.enqueuedForTriage,
           },
+          searchContext: searchCtx
+            ? { sourceWeights: Object.fromEntries(searchCtx.sourceWeights.map(w => [w.sourceId, w.weight])), topicBoosts: searchCtx.topicBoosts.map(b => b.term), topicSuppressions: searchCtx.topicSuppressions, recallMode: searchCtx.recallMode }
+            : {},
+          knowledgePack: kpack
+            ? { productCapabilities: kpack.productCapabilities.map(c => c.capability), knownLimitations: kpack.knownLimitations, verticalContext: kpack.verticalContext }
+            : {},
+          meetingCharter: {},
         }
         lastRunStore.save(summary)
         console.log(`\nDone. ${result.ingested} ingested → ${result.scored} scored → ${result.approved} approved → ${result.opportunities} opportunities`)
