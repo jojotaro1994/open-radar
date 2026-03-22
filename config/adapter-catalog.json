@@ -1,0 +1,41 @@
+{
+  "$schema": "./adapter-catalog.schema.json",
+  "adapters": [
+    {
+      "id": "jira-rr",
+      "enabled": false,
+      "module": "jira-rr-adapter",
+      "description": "Jira RR — Radica Requirements pool (context role)"
+    },
+    {
+      "id": "jira-ma",
+      "enabled": false,
+      "module": "jira-ma-adapter",
+      "description": "Jira MA — RIPlus main project (context role)"
+    },
+    {
+      "id": "confluence",
+      "enabled": false,
+      "module": "confluence-adapter",
+      "description": "Confluence — internal documentation (context role)"
+    },
+    {
+      "id": "github-discussions",
+      "enabled": false,
+      "module": "github-discussions-adapter",
+      "description": "GitHub Discussions — open-source signal (context role)"
+    },
+    {
+      "id": "hackernews",
+      "enabled": true,
+      "module": "hackernews-smart-adapter",
+      "description": "Hacker News — open web signal (direct_signal role)"
+    },
+    {
+      "id": "riplus-insurance-travel",
+      "enabled": true,
+      "module": "riplus-insurance-travel-mock-adapter",
+      "description": "RIPlus mock — insurance/travel direct signal (direct_signal role, test only)"
+    }
+  ]
+}
