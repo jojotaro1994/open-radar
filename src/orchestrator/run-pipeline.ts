@@ -1,14 +1,14 @@
 /**
  * run-pipeline.ts — shared pipeline core.
  *
- * Current runtime inputs:
- *   RadarIntent    — the authoritative persistent intent for this run
- *   ActiveStrategy — optional session overlay (transitional; NOT the main model)
+ * Runtime inputs:
+ *   RadarIntent      — authoritative persistent intent
+ *   SearchContext    — how to search (source weights/suppressions); optional
+ *   KnowledgePack    — what the system knows (opportunity heuristics); optional
+ *   ActiveStrategy   — optional session overlay (transitional compatibility)
  *
- * ActiveStrategy is applied as a compatibility overlay only (source pause,
- * relevance threshold override, focus narrowing). The authoritative long-lived
- * inputs (Search Context, Knowledge Pack, Meeting Charter) are not yet wired
- * as runtime parameters — see design.md for the target object model.
+ * SearchContext and KnowledgePack are the authoritative long-lived inputs.
+ * ActiveStrategy remains for session-level compatibility only.
  *
  * Callers pass strategy as-is; they never need to pre-apply it.
  */
@@ -17,12 +17,16 @@ import * as path from "path"
 import * as fs from "fs"
 import type { RadarIntent } from "../schemas/intent.js"
 import type { ActiveStrategy } from "../state/active-strategy.js"
+import type { SearchContext } from "../state/search-context.js"
+import type { KnowledgePack } from "../state/knowledge-pack.js"
 
 export interface PipelineOptions {
   intent: RadarIntent
   dataDir: string
   strategy?: ActiveStrategy        // session overlays; standalone runner does not pass this
   useCommercialAnalyst?: boolean
+  searchContext?: SearchContext   // long-lived: how to search
+  knowledgePack?: KnowledgePack   // long-lived: what the system knows
 }
 
 export interface PipelineResult {
@@ -65,7 +69,8 @@ async function triageWithCommercialAnalyst(
   signals: any[],
   scored: any[],
   intent: any,
-  cycleId: string
+  cycleId: string,
+  knowledgePack?: any
 ): Promise<Map<string, { decision: TriageDecision; reason: string; assessment: any }>> {
   const { CommercialAnalyst } = await import("../agents/commercial-analyst.js")
   const analyst = new CommercialAnalyst()
@@ -79,7 +84,7 @@ async function triageWithCommercialAnalyst(
 
   console.log(`[CommercialAnalyst] ${toAssess.length} signals pass first-pass filter (non-bug, non-noise)`)
 
-  const assessments = await analyst.batchAssess(toAssess, intent)
+  const assessments = await analyst.batchAssess(toAssess, intent, knowledgePack)
 
   const results = new Map<string, { decision: TriageDecision; reason: string; assessment: any }>()
 
@@ -139,6 +144,20 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
 
   // sourceBias pause: filter out paused sources before polling
   let adapterNames = SourceRegistry.listForIntent(intent.id, intent.sourcePriority)
+
+  // Apply SearchContext sourceWeights (long-lived suppression/boost)
+  if (options.searchContext?.sourceWeights?.length) {
+    const weights = options.searchContext.sourceWeights
+    const suppressSet = new Set(
+      weights.filter(w => w.weight === 0).map(w => w.sourceId)
+    )
+    const suppressedNames = [...suppressSet]
+    if (suppressedNames.length > 0) {
+      adapterNames = adapterNames.filter(n => !suppressSet.has(n))
+      console.log(`[SearchContext] Suppressed sources: ${suppressedNames.join(", ")}`)
+    }
+  }
+
   if (strategy?.sourceBias?.action === "pause") {
     adapterNames = adapterNames.filter(n => n !== strategy.sourceBias!.sourceId)
     console.log(`[Strategy] Paused source: ${strategy.sourceBias.sourceId}`)
@@ -242,7 +261,7 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
 
   // ── Step 5b: Commercial Analyst (LLM) ─────────────────────────────────
   const triageResults = options.useCommercialAnalyst
-    ? await triageWithCommercialAnalyst(qualified, scored, intent, cycleId)
+    ? await triageWithCommercialAnalyst(qualified, scored, intent, cycleId, options.knowledgePack)
     : null
 
   // ── Step 5c: Focus narrowing (post-qualification) ──────────────────────
