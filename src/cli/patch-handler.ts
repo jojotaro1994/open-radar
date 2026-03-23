@@ -2,19 +2,18 @@
  * patch-handler.ts — parses natural language into patch actions.
  *
  * Change flow:
- *   preview-first (default) → structured preview → y/n confirm → apply
+ *   preview-first (default for relevant fields) → structured preview → y/n confirm → apply
  *   session (explicit "这轮"/"先"/"暂时"/"临时") → immediate, no preview
  *
- * Field routing:
- *   relevanceThreshold → persistent preview by default; session if marker present
+ * Field routing (the authoritative path — classifyPatch() below is not used):
+ *   relevanceThreshold → persistent preview by default; session if explicit marker
  *   excludeTags        → persistent preview (no session path; nudge toward persistent)
  *   focus             → session immediate only (persistent path: use includeTags)
  *   sourceBias        → always session immediate (no persistent equivalent yet)
  *
- * Classification rules:
- *   "这轮" "先" "暂时" "临时" | "just this" "for now" "temporarily"  → session
- *   "从现在起" "永久" "一直" "以后都" | "from now on" "permanently" "always" → persistent
- *   (no signal word, for relevant fields) → persistent (preview-first)
+ * Note: `classifyPatch()` exists for potential future use but is NOT called
+ * by the current field-level routing in `buildPatchAction()`. The field routing
+ * above is the authoritative behavior.
  */
 
 import * as fs from "fs"
@@ -26,11 +25,11 @@ export type PatchClassification = "session" | "persistent"
 const SESSION_MARKERS = ["这轮", "先", "暂时", "临时", "just this", "for now", "temporarily"]
 const PERSISTENT_MARKERS = ["从现在起", "永久", "一直", "以后都", "from now on", "permanently", "always", "forever"]
 
+// NOTE: Not called by buildPatchAction —保留 for potential future use
 export function classifyPatch(text: string): PatchClassification {
   for (const m of PERSISTENT_MARKERS) {
     if (text.includes(m)) return "persistent"
   }
-  // Session signals are checked for clarity, but the default is also "session"
   return "session"
 }
 

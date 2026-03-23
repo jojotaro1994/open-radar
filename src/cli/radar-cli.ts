@@ -45,6 +45,88 @@ function intentPath(intentId: string): string {
   return path.join(process.cwd(), "config", "intents", `${intentId}.json`)
 }
 
+/**
+ * explainSignal — reconstructs why a signal was triaged the way it was.
+ *
+ * Reads:
+ *   data/review-queue/{signalId}/meta.json      — cycleId, enqueuedAt
+ *   data/review-queue/{signalId}/status.json    — current status
+ *   data/review-queue/{signalId}/triage.json    — triage decision + reason
+ *   data/scored-signals/{signalId}.json        — signal title, relevanceScore, qualification
+ *   data/run-contexts/{cycleId}.json            — context at time of triage (if available)
+ */
+function explainSignal(
+  signalId: string,
+  dataDir: string,
+  runContextStore: RunContextStore
+): string {
+  const queueDir = path.join(dataDir, "review-queue", signalId)
+
+  const meta = readJsonOrNull(path.join(queueDir, "meta.json")) as
+    | { signalId: string; cycleId: string; enqueuedAt: string }
+    | null
+  const status = readJsonOrNull(path.join(queueDir, "status.json")) as
+    | { status: string }
+    | null
+  const triage = readJsonOrNull(path.join(queueDir, "triage.json")) as
+    | { decision: string; reviewedBy: string; reviewedAt: string; reason?: string }
+    | null
+  const signal = readJsonOrNull(
+    path.join(dataDir, "scored-signals", `${signalId}.json`)
+  ) as Record<string, unknown> | null
+
+  if (!meta || !status) {
+    return `Signal "${signalId}" not found in review queue.`
+  }
+
+  const lines: string[] = []
+  lines.push(`\n── Signal: ${signalId} ──`)
+
+  if (signal) {
+    const title = (signal.title as string) ?? "(no title)"
+    const score = (signal.relevanceScore as number)?.toFixed(3) ?? "unknown"
+    const qual = (signal.qualification as { qualification?: string })?.qualification ?? "unknown"
+    lines.push(`Title:   ${title}`)
+    lines.push(`Score:   ${score}  |  Qualification: ${qual}`)
+  } else {
+    lines.push(`(scored signal not found — run may be older)`)
+  }
+
+  lines.push(`Status:  ${status.status}`)
+  if (triage) {
+    lines.push(`Triage:  ${triage.decision}  by ${triage.reviewedBy}  at ${triage.reviewedAt}`)
+    if (triage.reason) lines.push(`Reason:  ${triage.reason}`)
+  }
+
+  lines.push(`Cycle:   ${meta.cycleId}  enqueued ${meta.enqueuedAt}`)
+
+  // Try to load run-context for richer explanation
+  const ctx = runContextStore.load(meta.cycleId)
+  if (ctx) {
+    const sc = ctx.searchContext
+    const kp = ctx.knowledgePack
+    if (sc?.recallMode) lines.push(`SearchContext recallMode: ${sc.recallMode}`)
+    if (kp?.verticalContext) lines.push(`KnowledgePack context: ${(kp.verticalContext as string).slice(0, 80)}...`)
+    if (sc?.sourceWeights && Object.keys(sc.sourceWeights).length > 0) {
+      lines.push(`Source weights at time: ${JSON.stringify(sc.sourceWeights)}`)
+    }
+  } else {
+    lines.push(`(run-context not available for this cycle)`)
+  }
+
+  lines.push("─────────────────────────────\n")
+  return lines.join("\n")
+}
+
+function readJsonOrNull(filePath: string): unknown | null {
+  try {
+    if (!fs.existsSync(filePath)) return null
+    return JSON.parse(fs.readFileSync(filePath, "utf-8"))
+  } catch {
+    return null
+  }
+}
+
 async function main(): Promise<void> {
   const intentArg = process.argv.find(a => a.startsWith("--intent="))
   const intentId = intentArg ? intentArg.split("=")[1]! : "riplus-ma"
@@ -144,6 +226,20 @@ async function main(): Promise<void> {
       return
     }
 
+    // ── /why {signalId} — explain a signal's triage decision ─────────────────
+    if (line.startsWith("/why ")) {
+      const signalId = line.slice(4).trim()
+      if (!signalId) {
+        console.log("Usage: /why <signalId>")
+        rl.prompt()
+        return
+      }
+      const output = explainSignal(signalId, DATA_DIR, runContextStore)
+      console.log(output)
+      rl.prompt()
+      return
+    }
+
     if (line === "/run") {
       if (running) { console.log("Pipeline is already running. Please wait."); rl.prompt(); return }
       running = true
@@ -232,11 +328,12 @@ async function main(): Promise<void> {
       console.log([
         "",
         "Commands:",
-        "  /state   — 查看 Current Intent / Search Context / Knowledge Pack / Meeting Charter / Last Run",
-        "  /undo    — 撤销最后一个 session patch",
-        "  /reset   — 清除所有 session patches",
-        "  /run     — (提示) 使用 runner 脚本执行完整管道",
-        "  /exit    — 退出",
+        "  /state         — 查看 Current Intent / Search Context / Knowledge Pack / Meeting Charter / Last Run",
+        "  /undo          — 撤销最后一个 session patch",
+        "  /reset         — 清除所有 session patches",
+        "  /why <signalId — 查看某个 signal 的 triage 决定原因",
+        "  /run          — (提示) 使用 runner 脚本执行完整管道",
+        "  /exit         — 退出",
         "",
         "Persistent change (preview-first — default for relevantThreshold/excludeTags):",
         '  "降低相关度门槛到 0.2"        → structured preview → confirm → persistent change',
