@@ -46,6 +46,110 @@ function intentPath(intentId: string): string {
 }
 
 /**
+ * reviewRun — shows what happened in the last pipeline run (or a specific cycle).
+ *
+ * Uses:
+ *   LastRunSummary  — most recent run stats
+ *   RunContext      — full context snapshot for a cycle (SearchContext, KnowledgePack, etc.)
+ *
+ * Accepts optional cycleId. If omitted, uses the most recent cycle from RunContextStore.
+ */
+function reviewRun(
+  dataDir: string,
+  runContextStore: RunContextStore,
+  lastRunStore: LastRunStore,
+  intentId: string,
+  cycleId?: string
+): string {
+  // Find cycleId to use
+  const targetCycleId = cycleId ?? (() => {
+    const allCycles = runContextStore.list().sort()
+    return allCycles[allCycles.length - 1] ?? null
+  })()
+
+  if (!targetCycleId) {
+    return `No run history found. Run /run first.`
+  }
+
+  const ctx = runContextStore.load(targetCycleId)
+  const lastRun = lastRunStore.load()
+
+  const lines: string[] = []
+  lines.push(`\n── Radar Review ──────────────────────`)
+  lines.push(`Cycle:    ${targetCycleId}`)
+  lines.push(`Intent:   ${ctx?.intentId ?? intentId}`)
+
+  if (ctx?.pipelineStats) {
+    const ps = ctx.pipelineStats
+    lines.push(``)
+    lines.push(`Pipeline:`)
+    lines.push(`  ingested:           ${ps.ingested}`)
+    lines.push(`  scored:            ${ps.scored}`)
+    lines.push(`  qualified:         ${ps.qualified}`)
+    lines.push(`  enqueuedForTriage: ${ps.enqueuedForTriage}`)
+    lines.push(`  approved:          ${ps.approved}`)
+    lines.push(`  rejected:          ${ps.rejected}`)
+    lines.push(`  deferred:          ${ps.deferred}`)
+    lines.push(`  themes:            ${ps.themes}`)
+    lines.push(`  opportunities:     ${ps.opportunities}`)
+  } else {
+    lines.push(`(pipeline stats not available for this cycle)`)
+  }
+
+  // Source stats from LastRun
+  if (lastRun?.sources && lastRun.sources.length > 0) {
+    lines.push(``)
+    lines.push(`Sources:`)
+    for (const s of lastRun.sources) {
+      lines.push(`  ${s.name} (${s.role}): ${s.signalCount} signals`)
+    }
+  }
+
+  // SearchContext summary
+  if (ctx?.searchContext && Object.keys(ctx.searchContext).length > 0) {
+    lines.push(``)
+    lines.push(`SearchContext:`)
+    if (ctx.searchContext.recallMode) lines.push(`  recallMode:     ${ctx.searchContext.recallMode}`)
+    if (ctx.searchContext.topicBoosts?.length) lines.push(`  topicBoosts:    ${ctx.searchContext.topicBoosts.join(", ")}`)
+    if (ctx.searchContext.topicSuppressions?.length) lines.push(`  suppressions:   ${ctx.searchContext.topicSuppressions.join(", ")}`)
+    if (ctx.searchContext.sourceWeights && Object.keys(ctx.searchContext.sourceWeights).length > 0) {
+      const entries = Object.entries(ctx.searchContext.sourceWeights).map(([k, v]) => `${k}=${v}`).join(", ")
+      lines.push(`  sourceWeights: ${entries}`)
+    }
+  }
+
+  // KnowledgePack summary
+  if (ctx?.knowledgePack && Object.keys(ctx.knowledgePack).length > 0) {
+    lines.push(``)
+    lines.push(`KnowledgePack:`)
+    if (ctx.knowledgePack.productCapabilities?.length) {
+      lines.push(`  productCapabilities: ${ctx.knowledgePack.productCapabilities.join(", ")}`)
+    }
+    if (ctx.knowledgePack.verticalContext) {
+      const vc = (ctx.knowledgePack.verticalContext as string)
+      lines.push(`  verticalContext: ${vc.slice(0, 80)}${vc.length > 80 ? "..." : ""}`)
+    }
+  }
+
+  // MeetingCharter summary
+  if (ctx?.meetingCharter && Object.keys(ctx.meetingCharter).length > 0) {
+    lines.push(``)
+    lines.push(`MeetingCharter:`)
+    if (ctx.meetingCharter.objective) lines.push(`  objective:        ${ctx.meetingCharter.objective}`)
+    if (ctx.meetingCharter.primaryLens) lines.push(`  primaryLens:     ${ctx.meetingCharter.primaryLens}`)
+    if (ctx.meetingCharter.requiredQuestions?.length) {
+      lines.push(`  requiredQuestions:`)
+      for (const q of ctx.meetingCharter.requiredQuestions) {
+        lines.push(`    - ${q}`)
+      }
+    }
+  }
+
+  lines.push(`─────────────────────────────────\n`)
+  return lines.join("\n")
+}
+
+/**
  * explainSignal — reconstructs why a signal was triaged the way it was.
  *
  * Reads:
@@ -147,7 +251,7 @@ async function main(): Promise<void> {
   })
 
   console.log(`\nRadar CLI — intent: ${intentId}`)
-  console.log(`Commands: /state  /undo  /reset  /help  /exit`)
+  console.log(`Commands: /state  /undo  /reset  /review [cycleId]  /why <signalId>  /help  /exit`)
   console.log(`Natural language: describe what you want to adjust\n`)
 
   // Pending persistent-change confirmation state
@@ -222,6 +326,15 @@ async function main(): Promise<void> {
     if (line === "/reset") {
       strategyManager.clear()
       console.log("已清除所有 session patches。Active Strategy 已重置。")
+      rl.prompt()
+      return
+    }
+
+    // ── /review [cycleId] — show last run summary ─────────────────────────────
+    if (line === "/review" || line.startsWith("/review ")) {
+      const cycleId = line.startsWith("/review ") ? line.slice(8).trim() : undefined
+      const output = reviewRun(DATA_DIR, runContextStore, lastRunStore, intentId, cycleId ?? undefined)
+      console.log(output)
       rl.prompt()
       return
     }
@@ -328,12 +441,13 @@ async function main(): Promise<void> {
       console.log([
         "",
         "Commands:",
-        "  /state         — 查看 Current Intent / Search Context / Knowledge Pack / Meeting Charter / Last Run",
-        "  /undo          — 撤销最后一个 session patch",
-        "  /reset         — 清除所有 session patches",
-        "  /why <signalId — 查看某个 signal 的 triage 决定原因",
-        "  /run          — (提示) 使用 runner 脚本执行完整管道",
-        "  /exit         — 退出",
+        "  /state          — 查看 Current Intent / Search Context / Knowledge Pack / Meeting Charter / Last Run",
+        "  /undo           — 撤销最后一个 session patch",
+        "  /reset          — 清除所有 session patches",
+        "  /review [cycleId] — 查看最近一次 /run 的完整报告（含 pipeline 统计和上下文快照）",
+        "  /why <signalId> — 查看某个 signal 的 triage 决定原因",
+        "  /run            — (提示) 使用 runner 脚本执行完整管道",
+        "  /exit           — 退出",
         "",
         "Persistent change (preview-first — default for relevantThreshold/excludeTags):",
         '  "降低相关度门槛到 0.2"        → structured preview → confirm → persistent change',

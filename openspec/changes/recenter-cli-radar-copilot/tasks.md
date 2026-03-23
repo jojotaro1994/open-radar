@@ -2,7 +2,7 @@
 
 ## Task 1 — Review current implementation and fix drift against current product direction
 **Priority: P0**
-**Status: PARTIAL — review complete, acceptance baseline not yet green**
+**Status: DONE ✅**
 
 目标：
 
@@ -29,8 +29,9 @@
 
 Acceptance blockers:
 
-- `npm run build` 必须为绿；当前 adapter schema 兼容问题仍是阻塞项
-- docs/task status 不能超过真实 wiring 进度
+- `npm run build` ✅
+- `npm test` ✅
+- `openspec validate` ✅
 
 **Remaining open drift (documented, not blocking):**
 - D3: Session patches go immediate without structured preview — architectural gap, persistent path already has preview
@@ -103,7 +104,7 @@ ActiveStrategy 显示为 `── Active Strategy (session overlay) ──`， su
 
 ## Task 5 — Make `/run` read long-lived context objects
 **Priority: P1**
-**Status: PARTIAL — SearchContext + KnowledgePack partially wired; MeetingCharter snapshot-only**
+**Status: PARTIAL - SearchContext.topicSuppressions now wired; MeetingCharter snapshot-only**
 
 已交付：
 
@@ -116,7 +117,8 @@ ActiveStrategy 显示为 `── Active Strategy (session overlay) ──`， su
 未交付：
 
 - `MeetingCharter` 尚未影响 pipeline 运行语义（仅 snapshot/wiring truth）
-- `SearchContext.topicBoosts` / `topicSuppressions` / `recallMode` 尚未影响 scoring/qualification
+- `SearchContext.topicSuppressions` now wired: filters scored signals before qualification (step 4b)
+- `SearchContext.topicBoosts` / `recallMode` not yet affecting scoring/qualification
 
 ## Task 6 — `/why` explainability command
 **Priority: P2**
@@ -165,6 +167,25 @@ Cycle:   riplus-20260322-1774152785378  enqueued 2026-03-22T04:13:13.836Z
 未完成：
 
 - 未触碰的 runner 文件中的旧 session-first 引用（如有）
+
+
+
+## Task 10 — `/review` explainability command
+**Priority: P2**
+**Status: DONE**
+
+`radar-cli.ts` now implements `/review [cycleId]`:
+
+- Optional cycleId; defaults to most recent cycle
+- Reads RunContextStore + LastRunStore for full run report:
+  - cycleId, intentId
+  - pipeline stats (ingested/scored/qualified/approved/rejected/deferred/themes/opportunities)
+  - source stats from LastRun
+  - SearchContext summary (recallMode, topicBoosts, topicSuppressions, sourceWeights)
+  - KnowledgePack summary (productCapabilities, verticalContext)
+  - MeetingCharter summary (objective, primaryLens, requiredQuestions)
+
+Not delivered: history traversal of all cycles (future UX enhancement).
 
 ## Task 8 — Rebuild OpenSpec later from stabilized proposal/design/tasks
 **Priority: Deferred**

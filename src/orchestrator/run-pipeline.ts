@@ -238,6 +238,24 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
   const modelAttr = scored[0]?.attribution?.modelId ?? "unknown"
   console.log(`  Attribution modelId: ${modelAttr}\n`)
 
+  // ── Step 4b: Topic suppression (SearchContext) ────────────────────────────
+  // Apply topicSuppressions from SearchContext BEFORE qualification scoring.
+  // Suppressed signals are filtered out and do not enter the triage queue.
+  let afterTopicFilter = scored
+  if (options.searchContext?.topicSuppressions?.length) {
+    const suppressTerms = options.searchContext.topicSuppressions.map(t => t.toLowerCase())
+    afterTopicFilter = scored.filter(sig => {
+      const text = `${sig.title ?? ""} ${sig.body ?? ""} ${(sig.tags ?? []).join(" ")}`.toLowerCase()
+      return !suppressTerms.some(term => text.includes(term))
+    })
+    const removed = scored.length - afterTopicFilter.length
+    if (removed > 0) {
+      console.log(`[SearchContext] topicSuppressions filtered ${removed} signals: ${suppressTerms.join(", ")}`)
+    }
+  } else {
+    afterTopicFilter = scored
+  }
+
   // ── Step 5: Qualification ──────────────────────────────────────────────
   console.log("[4] QUALIFICATION FILTER")
   // relevanceThreshold overlay: clone intent with overridden minRelevanceScore
@@ -251,7 +269,7 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
       }
     : intent
   const { addQualification } = await import("../filters/qualification-filter.js")
-  const qualified = addQualification(scored, effectiveIntent)
+  const qualified = addQualification(afterTopicFilter, effectiveIntent)
   const qualCounts: Record<string, number> = {}
   for (const sig of qualified) {
     const q = sig.qualification?.qualification ?? "unknown"

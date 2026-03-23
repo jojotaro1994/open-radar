@@ -5,33 +5,18 @@
  *   preview-first (default for relevant fields) → structured preview → y/n confirm → apply
  *   session (explicit "这轮"/"先"/"暂时"/"临时") → immediate, no preview
  *
- * Field routing (the authoritative path — classifyPatch() below is not used):
+ * Field routing:
  *   relevanceThreshold → persistent preview by default; session if explicit marker
  *   excludeTags        → persistent preview (no session path; nudge toward persistent)
  *   focus             → session immediate only (persistent path: use includeTags)
  *   sourceBias        → always session immediate (no persistent equivalent yet)
- *
- * Note: `classifyPatch()` exists for potential future use but is NOT called
- * by the current field-level routing in `buildPatchAction()`. The field routing
- * above is the authoritative behavior.
  */
 
 import * as fs from "fs"
 import type { RadarIntent } from "../schemas/intent.js"
 import type { ActiveStrategyManager } from "../state/active-strategy.js"
 
-export type PatchClassification = "session" | "persistent"
-
 const SESSION_MARKERS = ["这轮", "先", "暂时", "临时", "just this", "for now", "temporarily"]
-const PERSISTENT_MARKERS = ["从现在起", "永久", "一直", "以后都", "from now on", "permanently", "always", "forever"]
-
-// NOTE: Not called by buildPatchAction —保留 for potential future use
-export function classifyPatch(text: string): PatchClassification {
-  for (const m of PERSISTENT_MARKERS) {
-    if (text.includes(m)) return "persistent"
-  }
-  return "session"
-}
 
 // ── Parsed intent from natural language ──────────────────────────────────────
 
