@@ -5,9 +5,10 @@
  *   RadarIntent      — authoritative persistent intent
  *   SearchContext    — how to search (source weights/suppressions); optional
  *   KnowledgePack    — what the system knows (opportunity heuristics); optional
+ *   MeetingCharter   — how to discuss / frame judgment (primaryLens, requiredQuestions); optional
  *   ActiveStrategy   — optional session overlay (transitional compatibility)
  *
- * SearchContext and KnowledgePack are the authoritative long-lived inputs.
+ * SearchContext, KnowledgePack, and MeetingCharter are the authoritative long-lived inputs.
  * ActiveStrategy remains for session-level compatibility only.
  *
  * Callers pass strategy as-is; they never need to pre-apply it.
@@ -19,6 +20,7 @@ import type { RadarIntent } from "../schemas/intent.js"
 import type { ActiveStrategy } from "../state/active-strategy.js"
 import type { SearchContext } from "../state/search-context.js"
 import type { KnowledgePack } from "../state/knowledge-pack.js"
+import type { MeetingCharter } from "../state/meeting-charter.js"
 
 export interface PipelineOptions {
   intent: RadarIntent
@@ -27,6 +29,7 @@ export interface PipelineOptions {
   useCommercialAnalyst?: boolean
   searchContext?: SearchContext   // long-lived: how to search
   knowledgePack?: KnowledgePack   // long-lived: what the system knows
+  meetingCharter?: MeetingCharter // long-lived: how to discuss / frame judgment
 }
 
 export interface PipelineResult {
@@ -70,7 +73,8 @@ async function triageWithCommercialAnalyst(
   scored: any[],
   intent: any,
   cycleId: string,
-  knowledgePack?: any
+  knowledgePack?: any,
+  meetingCharter?: any
 ): Promise<Map<string, { decision: TriageDecision; reason: string; assessment: any }>> {
   const { CommercialAnalyst } = await import("../agents/commercial-analyst.js")
   const analyst = new CommercialAnalyst()
@@ -84,7 +88,7 @@ async function triageWithCommercialAnalyst(
 
   console.log(`[CommercialAnalyst] ${toAssess.length} signals pass first-pass filter (non-bug, non-noise)`)
 
-  const assessments = await analyst.batchAssess(toAssess, intent, knowledgePack)
+  const assessments = await analyst.batchAssess(toAssess, intent, knowledgePack, meetingCharter)
 
   const results = new Map<string, { decision: TriageDecision; reason: string; assessment: any }>()
 
@@ -279,7 +283,7 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
 
   // ── Step 5b: Commercial Analyst (LLM) ─────────────────────────────────
   const triageResults = options.useCommercialAnalyst
-    ? await triageWithCommercialAnalyst(qualified, scored, intent, cycleId, options.knowledgePack)
+    ? await triageWithCommercialAnalyst(qualified, scored, intent, cycleId, options.knowledgePack, options.meetingCharter)
     : null
 
   // ── Step 5c: Focus narrowing (post-qualification) ──────────────────────

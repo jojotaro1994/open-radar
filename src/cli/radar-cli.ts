@@ -46,26 +46,23 @@ function intentPath(intentId: string): string {
 }
 
 /**
- * reviewRun — shows what happened in the last pipeline run (or a specific cycle).
+ * reviewRun — shows what happened in the last pipeline run.
  *
  * Uses:
- *   LastRunSummary  — most recent run stats
- *   RunContext      — full context snapshot for a cycle (SearchContext, KnowledgePack, etc.)
+ *   LastRunSummary  — latest run stats and source breakdown
+ *   RunContext      — latest cycle context snapshot (SearchContext, KnowledgePack, MeetingCharter)
  *
- * Accepts optional cycleId. If omitted, uses the most recent cycle from RunContextStore.
+ * Always shows the most recent run. There is no historical cycle traversal.
  */
 function reviewRun(
   dataDir: string,
   runContextStore: RunContextStore,
   lastRunStore: LastRunStore,
-  intentId: string,
-  cycleId?: string
+  intentId: string
 ): string {
-  // Find cycleId to use
-  const targetCycleId = cycleId ?? (() => {
-    const allCycles = runContextStore.list().sort()
-    return allCycles[allCycles.length - 1] ?? null
-  })()
+  // Always use the most recent cycle
+  const allCycles = runContextStore.list().sort()
+  const targetCycleId = allCycles[allCycles.length - 1] ?? null
 
   if (!targetCycleId) {
     return `No run history found. Run /run first.`
@@ -251,7 +248,7 @@ async function main(): Promise<void> {
   })
 
   console.log(`\nRadar CLI — intent: ${intentId}`)
-  console.log(`Commands: /state  /undo  /reset  /review [cycleId]  /why <signalId>  /help  /exit`)
+  console.log(`Commands: /state  /undo  /reset  /review  /why <signalId>  /help  /exit`)
   console.log(`Natural language: describe what you want to adjust\n`)
 
   // Pending persistent-change confirmation state
@@ -330,10 +327,9 @@ async function main(): Promise<void> {
       return
     }
 
-    // ── /review [cycleId] — show last run summary ─────────────────────────────
-    if (line === "/review" || line.startsWith("/review ")) {
-      const cycleId = line.startsWith("/review ") ? line.slice(8).trim() : undefined
-      const output = reviewRun(DATA_DIR, runContextStore, lastRunStore, intentId, cycleId ?? undefined)
+    // ── /review — show last run summary ─────────────────────────────────────
+    if (line === "/review") {
+      const output = reviewRun(DATA_DIR, runContextStore, lastRunStore, intentId)
       console.log(output)
       rl.prompt()
       return
@@ -370,6 +366,7 @@ async function main(): Promise<void> {
           useCommercialAnalyst: process.env.USE_COMMERCIAL_ANALYST === "true",
           searchContext: searchCtx,
           knowledgePack: kpack,
+          meetingCharter: charter,
         })
 
         // Save RunContext snapshot for explainability (/review, /why)
@@ -444,7 +441,7 @@ async function main(): Promise<void> {
         "  /state          — 查看 Current Intent / Search Context / Knowledge Pack / Meeting Charter / Last Run",
         "  /undo           — 撤销最后一个 session patch",
         "  /reset          — 清除所有 session patches",
-        "  /review [cycleId] — 查看最近一次 /run 的完整报告（含 pipeline 统计和上下文快照）",
+        "  /review          — 查看最近一次 /run 的完整报告（含 pipeline 统计和上下文快照）",
         "  /why <signalId> — 查看某个 signal 的 triage 决定原因",
         "  /run            — (提示) 使用 runner 脚本执行完整管道",
         "  /exit           — 退出",

@@ -23,6 +23,7 @@ import type { ScoredSignal } from "../adapters/source-adapter.js"
 import type { RadarIntent } from "../schemas/intent.js"
 import type { CommercialAssessment, AssessmentCategory } from "../schemas/commercial-assessment.js"
 import type { KnowledgePack } from "../state/knowledge-pack.js"
+import type { MeetingCharter } from "../state/meeting-charter.js"
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 const OPENROUTER_MODELS = (
@@ -68,10 +69,11 @@ export class CommercialAnalyst {
   async assess(
     signal: ScoredSignal,
     intent: RadarIntent,
-    knowledgePack?: KnowledgePack
+    knowledgePack?: KnowledgePack,
+    meetingCharter?: MeetingCharter
   ): Promise<CommercialAssessment> {
     const signalText = `${signal.title}\n\n${signal.body}`.slice(0, 2000)
-    const verticalContext = this.buildVerticalContext(intent, knowledgePack)
+    const verticalContext = this.buildVerticalContext(intent, knowledgePack, meetingCharter)
 
     const userPrompt = `Signal to assess:
 Title: ${signal.title}
@@ -110,16 +112,22 @@ Assess this signal.`
   async batchAssess(
     signals: ScoredSignal[],
     intent: RadarIntent,
-    knowledgePack?: KnowledgePack
+    knowledgePack?: KnowledgePack,
+    meetingCharter?: MeetingCharter
   ): Promise<CommercialAssessment[]> {
-    return Promise.all(signals.map(s => this.assess(s, intent, knowledgePack)))
+    return Promise.all(signals.map(s => this.assess(s, intent, knowledgePack, meetingCharter)))
   }
 
   /**
    * Build context string for the LLM prompt.
-   * Includes productContext and KnowledgePack.opportunityHeuristics when available.
+   * Includes productContext, KnowledgePack.opportunityHeuristics,
+   * and MeetingCharter.primaryLens + requiredQuestions when available.
    */
-  private buildVerticalContext(intent: RadarIntent, knowledgePack?: KnowledgePack): string {
+  private buildVerticalContext(
+    intent: RadarIntent,
+    knowledgePack?: KnowledgePack,
+    meetingCharter?: MeetingCharter
+  ): string {
     const parts: string[] = []
 
     if (intent.productContext) {
@@ -131,6 +139,17 @@ Assess this signal.`
         .map(h => `  - [${h.confidence}] ${h.pattern}: ${h.rationale}`)
         .join("\n")
       parts.push(`Opportunity heuristics:\n${heuristics}`)
+    }
+
+    if (meetingCharter?.primaryLens) {
+      parts.push(`Primary lens for evaluation: ${meetingCharter.primaryLens}`)
+    }
+
+    if (meetingCharter?.requiredQuestions?.length) {
+      const questions = meetingCharter.requiredQuestions
+        .map(q => `  - ${q.question} (why: ${q.whyItMatters})`)
+        .join("\n")
+      parts.push(`Required questions to consider:\n${questions}`)
     }
 
     return parts.length > 0 ? `\n${parts.join("\n\n")}` : ""

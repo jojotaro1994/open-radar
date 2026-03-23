@@ -119,19 +119,20 @@
 - `src/cli/radar-cli.ts` ✅ 现在以五对象（Current Intent / Search Context / Knowledge Pack / Meeting Charter / Last Run）为 CLI 主模型；ActiveStrategy 标注为 session overlay
 - `src/cli/patch-handler.ts` ✅ 现在采用字段级路由：relevanceThreshold 和 excludeTags 默认 persistent preview；sourceBias 强制 session；focus 强制 session（已有 nudge toward includeTags）
 - `src/state/state-printer.ts` ✅ 现在输出 5 个段落，ActiveStrategy 显示为 subordinate
-- `src/orchestrator/run-pipeline.ts` ✅ 现在加载 SearchContext + KnowledgePack 并传入 pipeline；MeetingCharter 快照保存但尚未影响运行时语义
+- `src/orchestrator/run-pipeline.ts` ✅ 现在加载 SearchContext + KnowledgePack + MeetingCharter 并传入 pipeline；MeetingCharter.primaryLens + requiredQuestions 注入 CommercialAnalyst LLM prompt（运行时语义）
 - `src/engine/review-queue.ts`、`src/orchestrator/invariants.test.ts` ✅ 继续体现 hard-gate 和 single-source-of-truth 正确方向
 
 **仍然部分状态：**
 
-- patch-handler 的 `classifyPatch()` 函数仍然返回 "session" 作为默认，但当前路由逻辑是字段级的，不再调用该函数（已记录为 known gap）
-- `MeetingCharter` 尚未在 pipeline 运行时产生语义影响（仅 snapshot）
-- `/why {signalId}` 命令现已实现（通过 cycleId 查询 RunContext + triage 记录）；`/review` 命令尚未实现
+- patch-handler 的 `classifyPatch()` 函数已移除（dead code）；字段级路由是唯一路径
+- `MeetingCharter` 现在通过 CommercialAnalyst LLM prompt 产生运行时语义影响（primaryLens + requiredQuestions）；尚未影响 pipeline 过滤逻辑
+- `/why {signalId}` 命令现已实现（通过 cycleId 查询 RunContext + triage 记录）
+- `/review` 命令现已实现（展示最近一次 run 的完整报告；latest run only）
 
 **仍待收敛的设计目标：**
 
 - `focus` 方向的 persistent path 尚未完全支持
-- `SearchContext.topicBoosts/topicSuppressions/recallMode` 尚未影响 scoring/qualification
+- `SearchContext.topicSuppressions` 已在 pipeline step 4b 中过滤 scored 信号（pre-qualification）；`topicBoosts` 和 `recallMode` 尚未影响 scoring/qualification
 
 ## Expected Outcome
 

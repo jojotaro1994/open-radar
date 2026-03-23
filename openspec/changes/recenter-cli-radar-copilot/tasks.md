@@ -104,7 +104,7 @@ ActiveStrategy 显示为 `── Active Strategy (session overlay) ──`， su
 
 ## Task 5 — Make `/run` read long-lived context objects
 **Priority: P1**
-**Status: PARTIAL - SearchContext.topicSuppressions now wired; MeetingCharter snapshot-only**
+**Status: PARTIAL - SearchContext.topicSuppressions wired; MeetingCharter.primaryLens/requiredQuestions now injected into CommercialAnalyst LLM prompt**
 
 已交付：
 
@@ -113,12 +113,11 @@ ActiveStrategy 显示为 `── Active Strategy (session overlay) ──`， su
 - `KnowledgePack.opportunityHeuristics` 通过 `buildVerticalContext` 注入 LLM prompt ✅
 - `commercial-analyst.ts` `batchAssess` 签名扩展为接受 `knowledgePack` ✅
 - `/run` 现在加载 MeetingCharter 并把真实 summary 写入 `LastRunSummary` / `RunContext` ✅
+- `MeetingCharter.primaryLens` + `requiredQuestions` 通过 `buildVerticalContext` 注入 CommercialAnalyst LLM prompt（step 5b）✅
 
 未交付：
 
-- `MeetingCharter` 尚未影响 pipeline 运行语义（仅 snapshot/wiring truth）
-- `SearchContext.topicSuppressions` now wired: filters scored signals before qualification (step 4b)
-- `SearchContext.topicBoosts` / `recallMode` not yet affecting scoring/qualification
+- `SearchContext.topicBoosts` / `recallMode` 尚未影响 scoring/qualification
 
 ## Task 6 — `/why` explainability command
 **Priority: P2**
@@ -174,9 +173,9 @@ Cycle:   riplus-20260322-1774152785378  enqueued 2026-03-22T04:13:13.836Z
 **Priority: P2**
 **Status: DONE**
 
-`radar-cli.ts` now implements `/review [cycleId]`:
+`radar-cli.ts` now implements `/review`:
 
-- Optional cycleId; defaults to most recent cycle
+- Latest run only (no cycleId parameter)
 - Reads RunContextStore + LastRunStore for full run report:
   - cycleId, intentId
   - pipeline stats (ingested/scored/qualified/approved/rejected/deferred/themes/opportunities)
