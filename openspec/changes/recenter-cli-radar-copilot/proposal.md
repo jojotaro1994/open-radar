@@ -126,7 +126,7 @@
 
 - patch-handler 的 `classifyPatch()` 函数仍然返回 "session" 作为默认，但当前路由逻辑是字段级的，不再调用该函数（已记录为 known gap）
 - `MeetingCharter` 尚未在 pipeline 运行时产生语义影响（仅 snapshot）
-- `/why` 和 `/review` 命令尚未实现（数据层基础已铺设）
+- `/why {signalId}` 命令现已实现（通过 cycleId 查询 RunContext + triage 记录）；`/review` 命令尚未实现
 
 **仍待收敛的设计目标：**
 

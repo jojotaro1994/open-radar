@@ -118,22 +118,37 @@ ActiveStrategy 显示为 `── Active Strategy (session overlay) ──`， su
 - `MeetingCharter` 尚未影响 pipeline 运行语义（仅 snapshot/wiring truth）
 - `SearchContext.topicBoosts` / `topicSuppressions` / `recallMode` 尚未影响 scoring/qualification
 
-## Task 6 — Lay the data/context foundation for `/review` and `/why`
+## Task 6 — `/why` explainability command
 **Priority: P2**
-**Status: PARTIAL — RunContext store and snapshot wiring done**
+**Status: DONE ✅**
 
 已交付：
 
-- `RunContextStore` — 持久化 `data/run-contexts/{cycleId}.json`，每个 cycle 保存完整快照 ✅
-- `LastRunSummary` 扩展 — 包含 `searchContext`/`knowledgePack`/`meetingCharter` summaries ✅
-- `radar-cli.ts` `/run` — 加载 SearchContext + KnowledgePack + MeetingCharter，并在 pipeline 完成后保存真实快照 ✅
-- `/run` 现在通过 `searchContext`/`knowledgePack` 参数将 CLI 层的 context 传入 pipeline；MeetingCharter 目前保存快照但未进入 pipeline 语义 ✅
+- `radar-cli.ts` — `/why {signalId}` 命令实现
+- 读取 `data/review-queue/{signalId}/meta.json` → 获取 `cycleId`
+- 读取 `data/review-queue/{signalId}/status.json` → 当前 triage status
+- 读取 `data/review-queue/{signalId}/triage.json` → decision + reason
+- 读取 `data/scored-signals/{signalId}.json` → signal title, relevanceScore, qualification
+- 读取 `data/run-contexts/{cycleId}.json` → SearchContext/KnowledgePack at time of triage（如果存在）
+- 当 run-context 不可用时（较老 cycle），正确降级显示
 
-未交付（完整 /review 和 /why 能力）：
+输出格式示例：
+```
+── Signal: jira-ma-MA-11146 ──
+Title:   email monitor analysize support ck
+Score:   0.392  |  Qualification: unknown
+Status:  deferred
+Triage:  deferred  by riplus-ma-agent  at 2026-03-22T04:13:13.960Z
+Reason:  Below threshold
+Cycle:   riplus-20260322-1774152785378  enqueued 2026-03-22T04:13:13.836Z
+(searchContext recallMode: normal — if run-context available)
+─────────────────────────────
+```
 
-- `/why {signalId}` 命令本身尚未实现（需要通过 cycleId 查询 RunContext + triage 记录）
+未交付（后续任务）：
+
 - `/review` 命令本身尚未实现
-- 但数据层基础已铺设：任何 future 实现都可以通过 cycleId 查到完整 RunContext
+- `/why` 对较老 cycle（run-context 不存在时）可显示 triage 信息但无上下文
 
 ## Task 7 — Deprecate session-first framing in docs and code paths
 **Priority: P2**
