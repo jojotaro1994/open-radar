@@ -172,8 +172,8 @@ ActiveStrategy 显示为 `── Active Strategy (session overlay) ──`， su
 已交付：
 
 - `config/adapter-catalog.json` — 所有已知 adapter 的清单，`enabled` 标志控制可用性
-  - enabled: jira-rr ✅, jira-ma ✅, confluence ✅, github-discussions ✅
-  - enabled: hackernews ✅, riplus-insurance-travel ✅
+  - 当前 enabled=true: hackernews, riplus-insurance-travel
+  - 当前 enabled=false: jira-rr, jira-ma, confluence, github-discussions
 - `src/registry/adapter-catalog.ts` — catalog 加载模块，`isAdapterEnabled()`, `getEnabledAdapters()`
 - `src/registry/register-all.ts` — 改为只注册 catalog 中 enabled=true 的 adapter
 - `src/registry/source-registry.ts` — `listForIntent()` 修复：
