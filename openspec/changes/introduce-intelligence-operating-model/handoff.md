@@ -1,0 +1,356 @@
+# Handoff
+
+## Purpose
+
+This change is no longer a documentation-only exercise. The implementation target is **100%**:
+
+- the new intelligence operating model is reflected in code, storage, and CLI behavior
+- the old radar-era runtime remains compatible where necessary
+- tests and OpenSpec checks pass
+
+This file is the direct handoff for Claude Code or any follow-up implementation agent.
+
+## What Is Already Done
+
+- `proposal.md`, `design.md`, `tasks.md` are complete
+- spec deltas are complete for:
+  - `reference-baseline`
+  - `intelligence-object-model`
+  - `meeting-governance`
+  - `decision-learning-loop`
+  - `metrics-intelligence`
+  - `activation-plane`
+- OpenSpec status for this change is complete at the artifact level
+- Architecture implementation is partially started:
+  - canonical local-folder layout helper exists
+  - core object types exist
+  - JSON-backed stores exist for the five core objects
+
+### ~55% Implementation Complete (Round 1)
+
+#### Phase 1 — Persistence Model: COMPLETE
+
+The following files were added as the first implementation slice:
+
+- `src/state/intelligence-layout.ts`
+- `src/state/intelligence-store-utils.ts`
+- `src/state/reference-fact.ts`
+- `src/state/reference-fact-store.ts`
+- `src/state/evidence.ts`
+- `src/state/evidence-store.ts`
+- `src/state/finding.ts`
+- `src/state/finding-store.ts`
+- `src/state/decision-object.ts`
+- `src/state/decision-object-store.ts`
+- `src/state/action-asset.ts`
+- `src/state/action-asset-store.ts`
+
+#### Phase 2 — Governance Types + Stores: COMPLETE
+
+- `src/state/human-review-feedback.ts` — structured feedback type
+- `src/state/human-review-feedback-store.ts` — JSON store
+- `src/state/evidence-request.ts` — evidence request type
+- `src/state/evidence-request-store.ts` — JSON store
+- `src/state/retrospective-case.ts` — retrospective case type
+- `src/state/retrospective-case-store.ts` — JSON store
+- `src/state/learning-memory.ts` — bounded learning memory type
+- `src/state/learning-memory-store.ts` — JSON store
+
+#### Phase 3 — Pipeline Integration: COMPLETE
+
+- `run-pipeline.ts` Step 3b: Creates Evidence from scored signals
+- `run-pipeline.ts` triage step: Creates Finding for approved signals
+- `run-pipeline.ts` Step 7b: Creates DecisionObject from assembled opportunities
+
+#### Phase 4 — CLI Exposure: COMPLETE
+
+- `src/cli/review-handler.ts` — structured review confirmation builder
+- `/decisions` — list all DecisionObjects
+- `/findings` — list all Findings
+- `/evidence` — list all Evidence
+- `/review decision <id>` — show DecisionObject detail
+- `/review decision <id> <resolution> [class] [reason]` — write structured feedback
+- `/review feedback` — show review feedback summary
+- `/retrospective` — list retrospective cases
+- `/learning` — show learning memory by status
+
+#### What This Means
+
+- the canonical storage model is present in code
+- the five core ontology objects have first-class TypeScript definitions and filesystem-backed stores
+- governance types (HumanReviewFeedback, EvidenceRequest, RetrospectiveCase, LearningMemory) have types + stores
+- Evidence → Finding → DecisionObject chain is wired in run-pipeline.ts
+- CLI fully exposes the new model
+- old radar-era runtime (MeetingRecord, ReviewQueue with signalId) remains compatible
+
+#### What Remains
+
+- Review Meeting vs Retrospective Meeting distinction (type-level distinction exists but meeting flows not separated)
+- Retrospective and LearningMemory CLI write flows (types+stores done, interactive commands not yet)
+- Scout/Modeler/Meeting context envelopes (not yet defined)
+- Metrics-driven priority weighting (types exist, not yet wired to meeting policy)
+- EvidenceRequest write from CLI (interactive mode)
+
+## What 100% Means
+
+This change is only done when all of the following are true:
+
+1. The runtime can persist and consume the new object chain:
+   - `ReferenceFact`
+   - `Evidence`
+   - `Finding`
+   - `DecisionObject`
+   - `ActionAsset`
+2. Meeting no longer treats raw signals as its primary unit of governance.
+3. Review resolution supports structured human feedback and evidence requests.
+4. Retrospective and learning memory have real persistence and lifecycle semantics.
+5. `ARR / NRR / NDR` can influence decision priority when present.
+6. CLI surfaces expose the new model without breaking the existing CLI-first workflow.
+7. Compatibility paths from the old radar model are either preserved or explicitly migrated.
+8. Build and tests pass.
+
+## Implementation Strategy
+
+Implement in this order. Do not jump straight into broad refactors without stabilizing the object chain first.
+
+### Phase 1: Freeze the persistence model
+
+Goal:
+
+- introduce filesystem-backed stores and types for the new core objects
+
+Required work:
+
+- add new state/types for:
+  - `ReferenceFact`
+  - `Evidence`
+  - `Finding`
+  - `DecisionObject`
+  - `ActionAsset`
+- add JSON-backed stores under the new canonical local-folder layout
+- make IDs and lineage explicit
+
+Suggested directory target:
+
+- `src/state/reference-fact.ts`
+- `src/state/evidence.ts`
+- `src/state/finding.ts`
+- `src/state/decision-object.ts`
+- `src/state/action-asset.ts`
+- matching `*-store.ts` files
+
+Acceptance:
+
+- a customer-intel or competitive-intel case can be represented end-to-end without using legacy `MeetingRecord` as the primary object
+
+Current status:
+
+- mostly complete as architecture scaffolding
+- remaining work is integration and real object production/consumption
+
+### Phase 2: Rework meeting governance
+
+Goal:
+
+- move meeting input from `signal + assessment` to `DecisionObject candidate + supporting bundle`
+
+Primary legacy touchpoints:
+
+- `src/state/ba-meeting-room.ts`
+- `src/state/meeting-record.ts`
+- `src/state/meeting-charter.ts`
+
+Required work:
+
+- define a new meeting output model oriented around governance
+- preserve compatibility where needed, but the canonical model should become:
+  - review input: `DecisionObject`
+  - review output: resolution + feedback + evidence requests + activation targets
+- introduce distinction between:
+  - `Review Meeting`
+  - `Retrospective Meeting`
+
+Acceptance:
+
+- reviewer can explain why meeting is governing `DecisionObject` instead of commenting on raw evidence
+
+### Phase 3: Implement the decision learning loop
+
+Goal:
+
+- support structured rejection/defer/watch feedback, reopen, retrospective, and bounded memory
+
+Primary legacy touchpoint:
+
+- `src/engine/review-queue.ts`
+
+Required work:
+
+- expand review persistence beyond `reason?: string`
+- add structured objects for:
+  - `HumanReviewFeedback`
+  - `EvidenceRequest`
+  - `RetrospectiveCase`
+  - `LearningMemory`
+- enforce:
+  - reject is not truth
+  - evidence availability is first-class
+  - learning memory is bounded and revisable
+
+Acceptance:
+
+- a rejected or deferred object can later re-enter a retrospective lane with traceable reasons
+- memory supports `candidate | active | superseded | expired`
+
+### Phase 4: Introduce Scout / Modeler / Meeting runtime boundaries
+
+Goal:
+
+- stop treating the current “scout then meeting” pipeline as sufficient
+
+Required work:
+
+- introduce role projections:
+  - `ScoutContextEnvelope`
+  - `ModelerContextEnvelope`
+  - `MeetingContextEnvelope`
+- weak-awareness rule for Scout:
+  - coverage-aware
+  - gap-aware
+  - conclusion-blind
+
+Acceptance:
+
+- Scout can avoid duplication and fill gaps without being polluted by accepted decisions
+
+### Phase 5: Make metrics first-class
+
+Goal:
+
+- metrics are no longer side notes
+
+Required work:
+
+- add metrics context to `Finding`
+- add metrics impact to `DecisionObject`
+- make meeting resolution able to weight:
+  - `ARR`
+  - `NRR`
+  - `NDR`
+
+Acceptance:
+
+- a decision can explicitly state whether it matters to expansion, retention, churn prevention, packaging leverage, or sales efficiency
+
+### Phase 6: Activation plane and CLI exposure
+
+Goal:
+
+- formalize downstream assets and surface the new model through CLI
+
+Required work:
+
+- define `ActionAsset` persistence and lineage
+- ensure prototype/video/playbook/digest derive from `DecisionObject`, not from raw findings
+- add or update CLI commands/state views so users can inspect:
+  - findings
+  - decision objects
+  - review queue
+  - retrospective queue
+  - learning memory state
+
+Acceptance:
+
+- CLI remains the first-class product form
+- the user can operate the new model without requiring a web UI
+
+## Immediate Code Review Targets
+
+These legacy files are the most likely first refactor anchors:
+
+- `src/state/ba-meeting-room.ts`
+- `src/state/meeting-record.ts`
+- `src/state/meeting-charter.ts`
+- `src/engine/review-queue.ts`
+- `src/state/knowledge-base.ts`
+- `src/state/knowledge-base-store.ts`
+
+These new files are the canonical starting point for the new model:
+
+- `src/state/intelligence-layout.ts`
+- `src/state/reference-fact.ts`
+- `src/state/reference-fact-store.ts`
+- `src/state/evidence.ts`
+- `src/state/evidence-store.ts`
+- `src/state/finding.ts`
+- `src/state/finding-store.ts`
+- `src/state/decision-object.ts`
+- `src/state/decision-object-store.ts`
+- `src/state/action-asset.ts`
+- `src/state/action-asset-store.ts`
+
+Use them for compatibility analysis, not as fixed design constraints.
+
+## Non-Negotiable Design Rules
+
+1. `ReferenceFact` does not directly generate business opportunities.
+2. Every `Finding` must backlink to `Evidence`.
+3. Every `DecisionObject` must backlink to `Finding`.
+4. Every `ActionAsset` must backlink to `DecisionObject`.
+5. `conflictsWithReference` is valid and may be high-value intelligence.
+6. `LearningMemory` is not a second knowledge base.
+7. Formal meeting is human-governed, even if queueing/recommendation is automatic.
+
+## Canonical Storage Direction
+
+Do not introduce graph DB in this change.
+
+Use:
+
+- local folder as source of record
+- JSON/JSONL as object storage
+- Markdown for human-facing published assets
+- explicit IDs and lineage fields so the model stays graph-compatible
+
+## Verification Checklist
+
+Before calling this change complete, verify:
+
+- `openspec status --change introduce-intelligence-operating-model`
+- `npm run build`
+- `npm test`
+
+Then verify manually:
+
+- one competitive-intel case can flow from evidence to decision object
+- one customer-intel case can flow from evidence to decision object
+- one review can generate structured feedback and evidence requests
+- one retrospective case can generate bounded learning memory
+
+## Delivery Standard For Claude Code
+
+Claude Code should not stop at partial schema work.
+
+The goal is to push this change to **100%**, meaning:
+
+- code changes are real
+- persistence exists
+- CLI behavior is updated
+- tests or invariants are updated
+- compatibility is handled consciously
+- remaining gaps are explicit only if they are truly blocked by missing product decisions
+
+## Recommended Next Move For Claude Code
+
+Do not start by adding more types.
+
+Start here:
+
+1. migrate meeting input/output around `DecisionObject`
+2. upgrade `review-queue.ts` from free-text reason to structured feedback
+3. add persistence for:
+   - `HumanReviewFeedback`
+   - `EvidenceRequest`
+4. only then add retrospective + learning memory
+
+If Claude Code starts by over-designing retrospective before integrating the new core object chain into runtime, it will waste time and create orphan abstractions.

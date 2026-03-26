@@ -1,0 +1,149 @@
+{
+  "review_id": "review-20260327-0118",
+  "created_at": "2026-03-27T01:18:00+08:00",
+  "reviewer": "claude-code-supervisor",
+  "target_change": "introduce-intelligence-operating-model",
+  "scope": [
+    "architecture",
+    "runtime-integration",
+    "meeting-governance",
+    "decision-learning-loop",
+    "metrics-intelligence",
+    "cli-surface"
+  ],
+  "repo_state_summary": "Tasks 1-2 are marked DONE. Types, stores, and canonical layout exist for all 9 objects (5 core + 4 governance/learning). run-pipeline.ts creates Evidence, Finding, and DecisionObject at runtime. CLI exposes /decisions, /findings, /evidence, /review decision <id>, /review feedback. However, meeting governance still consumes raw signals via ba-meeting-room.ts. ReviewQueue.triage() still uses free-text reason. HumanReviewFeedback, EvidenceRequest, RetrospectiveCase, and LearningMemory stores are imported in CLI but never written to by any code path. ActionAsset and ReferenceFact stores are defined but not used anywhere. Metrics fields (metricsImpact on DecisionObject, metricsContext on Finding) are always set to undefined in production code. 12 legacy runner files all call reviewQueue.triage() with the old free-text interface. No tests cover the new object model.",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "high",
+      "confidence": "high",
+      "category": "missing-integration",
+      "statement": "HumanReviewFeedback is never written anywhere. feedbackStore.save() is never called in any code path. The CLI imports HumanReviewFeedbackStore and reads from it (/review decision, /review feedback), but no CLI command or runtime flow actually creates a HumanReviewFeedback object. The entire structured feedback loop is read-only scaffolding with no write path.",
+      "evidence": [
+        "grep for feedbackStore.save returns zero matches across the entire src/ tree",
+        "src/cli/radar-cli.ts lines 818, 771-778: feedbackStore is instantiated and read, never written",
+        "src/engine/review-queue.ts line 30,160: triage() still takes reason?: string, not structured feedback"
+      ],
+      "recommendation": "Add a CLI command like /review submit <decisionObjectId> <resolution> <feedbackClass> [reason] that creates and persists a HumanReviewFeedback object. Wire this into the triage flow or as a post-triage human overlay."
+    },
+    {
+      "id": "f2",
+      "severity": "high",
+      "confidence": "high",
+      "category": "missing-integration",
+      "statement": "EvidenceRequest is never written anywhere. evidenceRequestStore.save() is never called. Same pattern as HumanReviewFeedback: store exists, CLI reads from it in /review decision detail view, but nothing creates these objects.",
+      "evidence": [
+        "grep for evidenceRequestStore.save returns zero matches across src/",
+        "src/cli/radar-cli.ts lines 785-793: reads evidence requests for display only"
+      ],
+      "recommendation": "Add a CLI command or automated pipeline step that creates EvidenceRequest objects when a DecisionObject is deferred due to insufficient evidence."
+    },
+    {
+      "id": "f3",
+      "severity": "high",
+      "confidence": "high",
+      "category": "drift",
+      "statement": "Meeting governance (ba-meeting-room.ts) still operates entirely on raw signals and CommercialAssessment, not on DecisionObjects. evaluateWithMeetingRoom() takes signalId, not decisionObjectId. MeetingRecord is produced per-signal, not per-DecisionObject. The design requires meeting to consume DecisionObject candidates, but the implementation has not started this migration.",
+      "evidence": [
+        "src/state/ba-meeting-room.ts: evaluateWithMeetingRoom(signalId, cycleId, decision, assessment, meetingCharter, knowledgePack) — no DecisionObject parameter",
+        "src/state/ba-meeting-room.ts: imports MeetingRecord, MeetingCharter, KnowledgePack, CommercialAssessment — no DecisionObject import",
+        "src/orchestrator/run-pipeline.ts line 437-445: MeetingRecord is created per-signal during triage, before DecisionObjects are even created (line 498+)"
+      ],
+      "recommendation": "This is the single most important structural change remaining. Refactor evaluateWithMeetingRoom to accept DecisionObject + Finding bundle as primary input. Create MeetingRecord after DecisionObject creation, not during per-signal triage."
+    },
+    {
+      "id": "f4",
+      "severity": "high",
+      "confidence": "high",
+      "category": "missing-integration",
+      "statement": "RetrospectiveCase and LearningMemory stores are imported in CLI but never instantiated as usable variables, and no code path creates objects of these types. The entire decision learning loop (Tasks 5-6) has zero runtime implementation.",
+      "evidence": [
+        "src/cli/radar-cli.ts lines 42-43: imports RetrospectiveCaseStore and LearningMemoryStore",
+        "grep for retrospectiveCaseStore (lowercase) in radar-cli.ts returns zero matches — variable never declared or used",
+        "grep for learningMemoryStore (lowercase) in radar-cli.ts returns zero matches — variable never declared or used",
+        "grep for .save() on these stores returns zero matches across entire src/"
+      ],
+      "recommendation": "After structured feedback is working (f1), add a /retrospective CLI command and persistence flow. But do not prioritize this before meeting governance migration (f3) and feedback write path (f1)."
+    },
+    {
+      "id": "f5",
+      "severity": "medium",
+      "confidence": "high",
+      "category": "missing-integration",
+      "statement": "ActionAsset and ReferenceFact stores are defined but never used anywhere in the codebase. No runtime code creates, reads, or lists these objects. These represent the start and end of the intelligence chain (ReferenceFact -> ... -> ActionAsset) but both extremes are entirely passive.",
+      "evidence": [
+        "grep for ActionAssetStore usage returns only the class definition in action-asset-store.ts",
+        "grep for ReferenceFactStore usage returns only the class definition in reference-fact-store.ts",
+        "No import of either store in run-pipeline.ts, radar-cli.ts, or any orchestrator file"
+      ],
+      "recommendation": "ReferenceFact integration should be deferred until after the core chain (Evidence->Finding->DecisionObject) is fully runtime-active. ActionAsset should be deferred until after meeting governance migration."
+    },
+    {
+      "id": "f6",
+      "severity": "medium",
+      "confidence": "high",
+      "category": "missing-integration",
+      "statement": "Metrics (ARR/NRR/NDR) are structurally present in types but always undefined at runtime. DecisionObject.metricsImpact is hardcoded to undefined in run-pipeline.ts line 572. Finding.metricsContext attempts to read assessment.arrImpact/nrrImpact/ndrImpact (lines 421-424) but CommercialAssessment does not define these fields, so they will always be undefined.",
+      "evidence": [
+        "src/orchestrator/run-pipeline.ts line 572: metricsImpact: undefined",
+        "src/orchestrator/run-pipeline.ts lines 421-424: casts assessment to any to read arrImpact/nrrImpact/ndrImpact which do not exist on CommercialAssessment",
+        "src/orchestrator/run-pipeline.ts line 539: metricsContext: undefined (fallback Finding creation)"
+      ],
+      "recommendation": "Define ARR/NRR/NDR fields on CommercialAssessment schema or create a separate metrics enrichment step. Without real data flowing into these fields, metrics intelligence (Task 8) cannot be verified."
+    },
+    {
+      "id": "f7",
+      "severity": "medium",
+      "confidence": "high",
+      "category": "consistency",
+      "statement": "ReviewQueue.triage() still uses the old free-text reason interface (reason?: string). All 12 runner files plus run-pipeline.ts call this old interface. The design requires structured HumanReviewFeedback to replace this, but the old interface has not been migrated or wrapped.",
+      "evidence": [
+        "src/engine/review-queue.ts line 30: reason?: string in ReviewQueueItem",
+        "src/engine/review-queue.ts line 160: triage(signalId, decision, reviewedBy, reason?: string)",
+        "12 runner files all call reviewQueue.triage() with string reason"
+      ],
+      "recommendation": "Either extend triage() to accept a HumanReviewFeedback alongside the legacy reason, or create a separate structured feedback flow that operates on DecisionObjects post-triage. Do not break the 12 legacy runners."
+    },
+    {
+      "id": "f8",
+      "severity": "medium",
+      "confidence": "medium",
+      "category": "risk",
+      "statement": "The pipeline creates MeetingRecord per-signal BEFORE DecisionObjects are created. This means the meeting governance artifact is produced from raw signal data, not from the new object model. The temporal ordering in run-pipeline.ts (triage at line 365 -> MeetingRecord at line 437 -> DecisionObject at line 498) makes it structurally impossible for meeting to govern DecisionObjects without a significant rewrite.",
+      "evidence": [
+        "src/orchestrator/run-pipeline.ts: Step 5 TRIAGE (line 365) -> evaluateWithMeetingRoom per-signal (line 437) -> Step 7b DECISION OBJECT CREATION (line 498)"
+      ],
+      "recommendation": "Reorder the pipeline: create Evidence -> Finding -> DecisionObject first, then run meeting governance on DecisionObjects. This is a prerequisite for Task 4."
+    },
+    {
+      "id": "f9",
+      "severity": "low",
+      "confidence": "high",
+      "category": "verification",
+      "statement": "No tests cover any of the new intelligence model types, stores, or runtime integration. invariants.test.ts tests only the old review-queue and signal model. Build health is unknown — the working tree has 20 files changed with ~1700 lines of insertions that are uncommitted.",
+      "evidence": [
+        "src/orchestrator/invariants.test.ts: tests ScoredSignal, ReviewQueue, VideoBrief — nothing about Evidence, Finding, DecisionObject, or any new type",
+        "git diff --stat: 20 files changed, 1701 insertions(+), 302 deletions(-) uncommitted"
+      ],
+      "recommendation": "Add at least one integration test that verifies: (1) Evidence can be persisted and loaded, (2) Finding backlinks to Evidence, (3) DecisionObject backlinks to Finding. Run npm run build to verify TypeScript compilation."
+    },
+    {
+      "id": "f10",
+      "severity": "low",
+      "confidence": "medium",
+      "category": "drift",
+      "statement": "The worker appears to be staying on-track with the intelligence operating model change. Recent commits (711c06e, d505a09, 5166818) are focused on wiring MeetingCharter, adding /review, and RunContext — all within scope. However, the uncommitted diff also shows changes to recenter-cli-radar-copilot proposal.md and tasks.md, which is a different OpenSpec change.",
+      "evidence": [
+        "git diff --stat: openspec/changes/recenter-cli-radar-copilot/proposal.md and tasks.md are modified",
+        "Recent commit messages all relate to either the radar CLI copilot change or intelligence operating model scaffolding"
+      ],
+      "recommendation": "Verify that the recenter-cli-radar-copilot changes are intentional cross-change syncs, not drift. If they are syncs, commit them separately to maintain change boundary clarity."
+    }
+  ],
+  "recommended_next_focus": [
+    "Reorder run-pipeline.ts so DecisionObjects are created BEFORE MeetingRecord, then migrate evaluateWithMeetingRoom to accept DecisionObject+Finding bundle instead of raw signalId",
+    "Add a CLI write path for HumanReviewFeedback (e.g. /review submit <decisionObjectId> <resolution> <feedbackClass>) so the structured feedback loop is end-to-end functional",
+    "Add one integration test covering Evidence->Finding->DecisionObject lineage persistence and backlink integrity"
+  ],
+  "status": "new"
+}

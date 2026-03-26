@@ -1,14 +1,14 @@
 /**
  * run-pipeline.ts — shared pipeline core.
  *
- * Runtime inputs:
+ * Runtime inputs (product model names → internal types):
  *   RadarIntent      — authoritative persistent intent
- *   SearchContext    — how to search (source weights/suppressions); optional
+ *   Scout Brief      — how to search (source weights/suppressions); optional  [SearchContext]
  *   KnowledgePack    — what the system knows (opportunity heuristics); optional
- *   MeetingCharter   — how to discuss / frame judgment (primaryLens, requiredQuestions); optional
+ *   Meeting Goal     — how to discuss / frame judgment (primaryLens, requiredQuestions); optional  [MeetingCharter]
  *   ActiveStrategy   — optional session overlay (transitional compatibility)
  *
- * SearchContext, KnowledgePack, and MeetingCharter are the authoritative long-lived inputs.
+ * Scout Brief, KnowledgePack, and Meeting Goal are the authoritative long-lived inputs.
  * ActiveStrategy remains for session-level compatibility only.
  *
  * Callers pass strategy as-is; they never need to pre-apply it.
@@ -20,7 +20,25 @@ import type { RadarIntent } from "../schemas/intent.js"
 import type { ActiveStrategy } from "../state/active-strategy.js"
 import type { SearchContext } from "../state/search-context.js"
 import type { KnowledgePack } from "../state/knowledge-pack.js"
+import type { KnowledgeBase } from "../state/knowledge-base.js"
 import type { MeetingCharter } from "../state/meeting-charter.js"
+import type { KnowledgeBrief } from "../state/knowledge-brief.js"
+import { getSourceWorkflowType } from "../registry/source-taxonomy.js"
+import { generateScoutPlan } from "../state/scout-commander.js"
+import { ScoutPlanStore } from "../state/scout-plan-store.js"
+import { RunContextStore } from "../state/run-context-store.js"
+import { summarizeSearchContext, summarizeKnowledgeBase } from "../state/context-summary.js"
+import { summarizeKnowledgePack } from "../state/context-summary.js"
+import { summarizeMeetingCharter } from "../state/context-summary.js"
+import { summarizeKnowledgeBrief } from "../state/context-summary.js"
+import { MeetingRecordStore } from "../state/meeting-record-store.js"
+import { evaluateWithMeetingRoom } from "../state/ba-meeting-room.js"
+import { EvidenceStore } from "../state/evidence-store.js"
+import { FindingStore } from "../state/finding-store.js"
+import { DecisionObjectStore } from "../state/decision-object-store.js"
+import type { Evidence } from "../state/evidence.js"
+import type { Finding } from "../state/finding.js"
+import type { DecisionObject } from "../state/decision-object.js"
 
 export interface PipelineOptions {
   intent: RadarIntent
@@ -28,8 +46,10 @@ export interface PipelineOptions {
   strategy?: ActiveStrategy        // session overlays; standalone runner does not pass this
   useCommercialAnalyst?: boolean
   searchContext?: SearchContext   // long-lived: how to search
+  knowledgeBase?: KnowledgeBase   // long-lived: durable inward knowledge layer
   knowledgePack?: KnowledgePack   // long-lived: what the system knows
   meetingCharter?: MeetingCharter // long-lived: how to discuss / frame judgment
+  knowledgeBrief?: KnowledgeBrief // long-lived: how inward knowledge exploration is directed
 }
 
 export interface PipelineResult {
@@ -142,14 +162,30 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
 
   ensureDir(options.dataDir)
 
+  // ── Scout Commander: Generate Scout Plan (auditable planner) ───────────────
+  const scoutPlanStore = new ScoutPlanStore(options.dataDir)
+  const scoutPlan = generateScoutPlan(cycleId, intent, options.searchContext, options.knowledgePack, options.knowledgeBase)
+  scoutPlanStore.save(scoutPlan)
+  console.log(`[Scout Commander] ScoutPlan generated: ${scoutPlan.totalAssignments} assignment(s)`)
+  for (const a of scoutPlan.assignments) {
+    console.log(`  [${a.assignmentId}] ${a.objective} — sources: ${a.allowedSources.join(", ") || "(all)"}`)
+  }
+  console.log("")
+
   // Import and register adapters
   await import("../registry/register-all.js")
   const { SourceRegistry } = await import("../registry/source-registry.js")
 
-  // sourceBias pause: filter out paused sources before polling
-  let adapterNames = SourceRegistry.listForIntent(intent.id, intent.sourcePriority)
+  // Begin from all sources configured on the intent, then split by workflow.
+  const configuredSourceNames = SourceRegistry.listForIntent(intent.id, intent.sourcePriority)
+  const knowledgeOnlySourceNames = configuredSourceNames.filter(name => getSourceWorkflowType(name) === "knowledge_source")
+  let adapterNames = configuredSourceNames.filter(name => getSourceWorkflowType(name) !== "knowledge_source")
 
-  // Apply SearchContext sourceWeights (long-lived suppression/boost)
+  if (knowledgeOnlySourceNames.length > 0) {
+    console.log(`[Flow boundary] Knowledge workflow sources configured but not polled in radar run: ${knowledgeOnlySourceNames.join(", ")}`)
+  }
+
+  // Apply Scout Brief sourceWeights (long-lived suppression/boost) to radar-capable sources only.
   if (options.searchContext?.sourceWeights?.length) {
     const weights = options.searchContext.sourceWeights
     const suppressSet = new Set(
@@ -158,15 +194,15 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
     const suppressedNames = [...suppressSet]
     if (suppressedNames.length > 0) {
       adapterNames = adapterNames.filter(n => !suppressSet.has(n))
-      console.log(`[SearchContext] Suppressed sources: ${suppressedNames.join(", ")}`)
+      console.log(`[Scout Brief] Suppressed radar sources: ${suppressedNames.join(", ")}`)
     }
   }
 
   if (strategy?.sourceBias?.action === "pause") {
     adapterNames = adapterNames.filter(n => n !== strategy.sourceBias!.sourceId)
-    console.log(`[Strategy] Paused source: ${strategy.sourceBias.sourceId}`)
+    console.log(`[Strategy] Paused radar source: ${strategy.sourceBias.sourceId}`)
   }
-  console.log(`[Registry] Active adapters for "${intent.id}": ${adapterNames.join(", ")}\n`)
+  console.log(`[Registry] Active radar adapters for "${intent.id}": ${adapterNames.join(", ")}\n`)
 
   // Connect all adapters
   const adapters: Map<string, Awaited<ReturnType<typeof SourceRegistry.get>>> = new Map()
@@ -242,6 +278,35 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
   const modelAttr = scored[0]?.attribution?.modelId ?? "unknown"
   console.log(`  Attribution modelId: ${modelAttr}\n`)
 
+  // ── Step 4b: Create Evidence objects from scored signals ────────────────────
+  // Evidence is the first-class evidence unit in the intelligence operating model.
+  // Every scored signal becomes an Evidence with explicit lineage back to source.
+  console.log("[3b] INTELLIGENCE EVIDENCE CREATION")
+  const evidenceStore = new EvidenceStore(options.dataDir)
+  const intelligenceTopic = intent.id as any  // topic = intentId for now
+  const evidenceCount = { created: 0 }
+  for (const sig of scored) {
+    // Avoid duplicate evidence for the same signal in the same cycle
+    const existing = evidenceStore.load(intelligenceTopic, sig.id)
+    if (existing) continue
+
+    const evidence: Evidence = {
+      evidenceId: sig.id,
+      sourceId: sig.attribution?.sourceAdapterId ?? sig.sourceType ?? "unknown",
+      topic: intelligenceTopic,
+      locator: `scored-signal:${sig.id}`,
+      capturedAt: sig.createdAt ?? new Date().toISOString(),
+      normalizedText: `${sig.title ?? ""} ${sig.body ?? ""}`.trim(),
+      entityRefs: sig.tags ?? [],
+      confidence: sig.relevanceScore,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    evidenceStore.save(intelligenceTopic, evidence)
+    evidenceCount.created++
+  }
+  console.log(`  Evidence objects created: ${evidenceCount.created}\n`)
+
   // ── Step 4b: Topic suppression (SearchContext) ────────────────────────────
   // Apply topicSuppressions from SearchContext BEFORE qualification scoring.
   // Suppressed signals are filtered out and do not enter the triage queue.
@@ -254,7 +319,7 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
     })
     const removed = scored.length - afterTopicFilter.length
     if (removed > 0) {
-      console.log(`[SearchContext] topicSuppressions filtered ${removed} signals: ${suppressTerms.join(", ")}`)
+      console.log(`[Scout Brief] topicSuppressions filtered ${removed} signals: ${suppressTerms.join(", ")}`)
     }
   } else {
     afterTopicFilter = scored
@@ -301,6 +366,9 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
   const reviewQueueModule = await import("../engine/review-queue.js")
   const ReviewQueue = reviewQueueModule.ReviewQueue
   const reviewQueue = new ReviewQueue(options.dataDir)
+  const meetingRecordStore = new MeetingRecordStore(options.dataDir)
+  const findingStore = new FindingStore(options.dataDir)
+  const decisionObjectStore = new DecisionObjectStore(options.dataDir)
   await reviewQueue.enqueueAll(qualifiedForTriage, cycleId)
 
   const pending = await reviewQueue.getPending()
@@ -322,6 +390,60 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
     }
 
     await reviewQueue.triage(item.signalId, decision, "riplus-ma-agent", reason)
+
+    // ── Intelligence model: create Finding for approved signals ───────────────
+    if (decision === "approved") {
+      const sig = signal
+      const assessment = triageResults?.get(signal.id)?.assessment ?? null
+      const findingId = `finding-${sig.id}`
+      const existingFinding = findingStore.load(intelligenceTopic, findingId)
+      if (!existingFinding) {
+        // Infer finding kind from signal category and commercial assessment
+        let findingKind: Finding["findingKind"] = "observation"
+        if (assessment?.category === "feature_request" || assessment?.category === "cross-sell") {
+          findingKind = "interpretation"
+        } else if (assessment?.category === "bug_report") {
+          findingKind = "contradiction"
+        }
+        const decisionRelevance: Finding["decisionRelevance"] =
+          assessment?.category === "renewal" ? "opportunity"
+          : assessment?.confidence != null && assessment.confidence >= 0.5 ? "opportunity"
+          : "execution"
+
+        const finding: Finding = {
+          findingId,
+          topic: intelligenceTopic,
+          findingKind,
+          aggregationLevel: "single_evidence",
+          decisionRelevance,
+          statement: assessment?.reasoning ?? `Signal approved: ${sig.title ?? sig.id}`,
+          supportedByEvidenceIds: [sig.id],
+          // NOTE: ARR/NRR/NDR fields are not yet on CommercialAssessment.
+          // When they are added, populate them here from the LLM response.
+          // opportunityScore is the currently available commercial relevance proxy.
+          metricsContext: assessment?.opportunityScore != null ? {
+            notes: [`opportunityScore=${assessment.opportunityScore}`, `confidence=${assessment.confidence}`],
+          } : undefined,
+          conflictsWithReferenceFactIds: [],
+          freshness: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+        findingStore.save(intelligenceTopic, finding)
+      }
+    }
+
+    // ── BA Meeting Room: Generate MeetingRecord for each triage decision ──────
+    const assessment = triageResults?.get(signal.id)?.assessment ?? null
+    const meetingRecord = evaluateWithMeetingRoom(
+      signal.id,
+      cycleId,
+      decision,
+      assessment,
+      options.meetingCharter,
+      options.knowledgePack,
+    )
+    meetingRecordStore.save(meetingRecord)
   }
 
   const approvedItems = await reviewQueue.getApproved(cycleId)
@@ -370,26 +492,144 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
   }
   console.log(`  Opportunities: ${opportunities.length}\n`)
 
+  // ── Step 7b: Create DecisionObjects from opportunities ─────────────────────
+  // Each approved opportunity becomes a DecisionObject for meeting governance.
+  // DecisionObject back-links to Finding(s), which back-link to Evidence.
+  console.log("[7b] DECISION OBJECT CREATION")
+  let decisionObjectCount = 0
+  for (const opp of opportunities) {
+    const existingDO = decisionObjectStore.load(intelligenceTopic, opp.id)
+    if (existingDO) continue
+
+    // Find the finding IDs that correspond to signals in this opportunity
+    // Use the pain card to get signal IDs (synchronously)
+    const painCardIds: string[] = (opp as any).painCardIds ?? []
+    const signalIds: string[] = []
+    for (const pcId of painCardIds) {
+      const pcPath = path.join(options.dataDir, "pain-cards", `${pcId}.json`)
+      if (fs.existsSync(pcPath)) {
+        const pc = JSON.parse(fs.readFileSync(pcPath, "utf-8")) as any
+        if (pc?.signalIds) signalIds.push(...pc.signalIds)
+      }
+    }
+
+    // Map signal IDs to finding IDs (finding-{signalId})
+    const supportedByFindingIds: string[] = []
+    for (const sigId of signalIds) {
+      const fid = `finding-${sigId}`
+      if (findingStore.load(intelligenceTopic, fid)) {
+        supportedByFindingIds.push(fid)
+      }
+    }
+
+    // If no findings exist yet, create them now from the scored signals
+    if (supportedByFindingIds.length === 0) {
+      for (const sigId of signalIds) {
+        const fid = `finding-${sigId}`
+        if (!findingStore.load(intelligenceTopic, fid)) {
+          const sig = scored.find((s: any) => s.id === sigId)
+          if (sig) {
+            const finding: Finding = {
+              findingId: fid,
+              topic: intelligenceTopic,
+              findingKind: "interpretation",
+              aggregationLevel: "single_evidence",
+              decisionRelevance: "opportunity",
+              statement: sig.title ?? sig.id,
+              supportedByEvidenceIds: [sigId],
+              metricsContext: undefined,
+              conflictsWithReferenceFactIds: [],
+              freshness: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }
+            findingStore.save(intelligenceTopic, finding)
+            supportedByFindingIds.push(fid)
+          }
+        } else {
+          supportedByFindingIds.push(fid)
+        }
+      }
+    }
+
+    // Infer priority band from pain card severity if available
+    let priorityBand: DecisionObject["priorityBand"] = "medium"
+    for (const pcId of painCardIds) {
+      const pcPath = path.join(options.dataDir, "pain-cards", `${pcId}.json`)
+      if (fs.existsSync(pcPath)) {
+        const pc = JSON.parse(fs.readFileSync(pcPath, "utf-8")) as any
+        if (pc?.severity === "high") { priorityBand = "high"; break }
+        if (pc?.severity === "medium") priorityBand = "medium"
+      }
+    }
+
+    const decisionObject: DecisionObject = {
+      decisionObjectId: opp.id,
+      topic: intelligenceTopic,
+      kind: "opportunity",
+      statement: opp.title ?? opp.summary ?? opp.id,
+      supportedByFindingIds,
+      priorityBand,
+      metricsImpact: undefined,
+      ownerSuggestion: undefined,
+      freshness: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    decisionObjectStore.save(intelligenceTopic, decisionObject)
+    decisionObjectCount++
+  }
+  console.log(`  DecisionObjects created: ${decisionObjectCount}\n`)
+
   // ── Step 9: Prototype briefs ──────────────────────────────────────────
   console.log("[8] PROTOTYPE BRIEFS")
   const { PrototypeBriefConsumer } = await import("../consumers/prototype-brief.js")
+  const { StitchProjectConsumer } = await import("../consumers/stitch-project.js")
   const { StorageHelper } = await import("../infrastructure/storage-helper.js")
   const storage = new StorageHelper(options.dataDir)
   const protoBrief = new PrototypeBriefConsumer(eventBus, storage)
+  const stitchProject = new StitchProjectConsumer(eventBus, storage)
   ensureDir(path.join(options.dataDir, "briefs", "prototype"))
 
   for (const opp of opportunities) {
     try {
-      await protoBrief.process("opportunity.created", {
+      const payload = {
         opportunityId: opp.id,
         productContext: intent.productContext,
         intentId: intent.id,
         sourceAdapterId: opp.attribution?.sourceAdapterId ?? "pipeline",
-      })
+      };
+      await protoBrief.process("opportunity.created", payload);
+      await stitchProject.process("opportunity.created", payload);
     } catch (err) {
       console.warn(`  Brief generation error for ${opp.id}: ${err}`)
     }
   }
+
+  // Save RunContext snapshot for /review and /audit
+  const runContextStore = new RunContextStore(options.dataDir)
+  runContextStore.save({
+    cycleId,
+    timestamp: new Date().toISOString(),
+    intentId: intent.id,
+    runType: "radar",
+    searchContext: summarizeSearchContext(options.searchContext),
+    knowledgeBase: summarizeKnowledgeBase(options.knowledgeBase),
+    knowledgePack: summarizeKnowledgePack(options.knowledgePack),
+    meetingCharter: summarizeMeetingCharter(options.meetingCharter),
+    knowledgeBrief: summarizeKnowledgeBrief(options.knowledgeBrief),
+    pipelineStats: {
+      ingested: allRawSignals.length,
+      scored: scored.length,
+      qualified: qualified.length,
+      enqueuedForTriage: qualifiedForTriage.length,
+      approved: approvedItems.length,
+      rejected: rejectedItems.length,
+      deferred: deferredItems.length,
+      themes: themes.length,
+      opportunities: opportunities.length,
+    },
+  })
 
   return {
     cycleId,
