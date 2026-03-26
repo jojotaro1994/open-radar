@@ -1,0 +1,86 @@
+{
+  "review_id": "review-20260327-0142",
+  "created_at": "2026-03-27T01:42:00+08:00",
+  "reviewer": "claude-code-supervisor",
+  "target_change": "introduce-intelligence-operating-model",
+  "scope": [
+    "architecture",
+    "runtime-integration",
+    "meeting-governance",
+    "decision-learning-loop",
+    "metrics-intelligence",
+    "cli-surface"
+  ],
+  "repo_state_summary": "Round 1 complete (152ce59). Types, stores, and CLI for all 9 objects exist. Evidence→Finding→DecisionObject chain wired in run-pipeline.ts. HumanReviewFeedback write path confirmed working (feedbackStore.save at radar-cli.ts:1199). Build and tests pass. review-handler.ts updated with richer type imports (MisjudgmentType, LearningMemoryType). Pipeline ordering unchanged: MeetingRecord created before DecisionObject. EvidenceRequest write path still absent — evidenceRequests hardcoded to [] and _requests never saved. Task 4, 6 (partial), 7, 8, and 9 (partial) remain open per tasks.md checkbox state.",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "high",
+      "confidence": "high",
+      "category": "missing-integration",
+      "statement": "EvidenceRequest write path remains absent. radar-cli.ts:1197 hardcodes evidenceRequests: [], and the onApply callback at line 1198 destructures _requests but never calls evidenceRequestStore.save(). The EvidenceRequest type and store are complete, and CLI can display them via listByDecisionObject(), but no code path persists new requests.",
+      "evidence": [
+        "src/cli/radar-cli.ts:1197: evidenceRequests: [] hardcoded",
+        "src/cli/radar-cli.ts:1198: onApply: (feedback, _requests) => { feedbackStore.save(feedback) } — _requests never saved",
+        "grep for evidenceRequestStore.save across src/ returns zero matches"
+      ],
+      "recommendation": "Add evidence request creation to the /review decision command: allow user to add one or more {requestedItem, whyItMatters, priority, availabilityStatus} entries before confirming. Persist via evidenceRequestStore.save() inside onApply alongside feedbackStore.save()."
+    },
+    {
+      "id": "f2",
+      "severity": "high",
+      "confidence": "high",
+      "category": "drift",
+      "statement": "Pipeline ordering has not changed. run-pipeline.ts creates MeetingRecord via evaluateWithMeetingRoom(signal.id, ...) at lines 437-445, BEFORE DecisionObject creation at line 495. Meeting governance is still structurally isolated from the DecisionObject chain. This is the root cause of f3/f8 from prior review and Task 4 remains open.",
+      "evidence": [
+        "src/orchestrator/run-pipeline.ts lines 437-445: MeetingRecord created per-signal",
+        "src/orchestrator/run-pipeline.ts line 495: DecisionObject creation Step 7b",
+        "src/state/ba-meeting-room.ts: evaluateWithMeetingRoom(signalId, ...) — no DecisionObject parameter"
+      ],
+      "recommendation": "This is the single most important structural change remaining (Task 4). Reorder: create DecisionObjects first (Step 7b), then run a second meeting evaluation pass over DecisionObjects. Do not remove the legacy MeetingRecord path yet — preserve it for backward compatibility while the DecisionObject-centered path matures."
+    },
+    {
+      "id": "f3",
+      "severity": "medium",
+      "confidence": "high",
+      "category": "consistency",
+      "statement": "tasks.md Task 4 still shows 'Wire structured review write from CLI' as unchecked (line 54), but HumanReviewFeedback write path IS working (feedbackStore.save called at radar-cli.ts:1199 on confirm). The tasks.md checkbox state does not reflect the actual implementation state. This creates confusion about what is actually remaining.",
+      "evidence": [
+        "openspec/changes/introduce-intelligence-operating-model/tasks.md line 54: [ ] Wire structured review write from CLI",
+        "src/cli/radar-cli.ts line 1199: feedbackStore.save(feedback) — confirmed present"
+      ],
+      "recommendation": "Update tasks.md line 54 to [x] for 'Wire structured review write from CLI'. This was already completed in the prior review round."
+    },
+    {
+      "id": "f4",
+      "severity": "medium",
+      "confidence": "high",
+      "category": "consistency",
+      "statement": "tasks.md Task 5 line 62 still shows 'Wire structured feedback write from CLI' as unchecked, and Task 5 overall is marked [x] with a '(structured review write pending)' qualifier. This appears to be referring to the EvidenceRequest write path (f1 above), not HumanReviewFeedback which is working. The ambiguity should be clarified in tasks.md.",
+      "evidence": [
+        "openspec/changes/introduce-intelligence-operating-model/tasks.md line 62: [ ] Wire structured feedback write from CLI",
+        "openspec/changes/introduce-intelligence-operating-model/tasks.md line 9: (structured review write pending) — ambiguous scope"
+      ],
+      "recommendation": "Clarify tasks.md: 'Wire structured feedback write from CLI' on line 62 should split into two separate checkboxes — one for HumanReviewFeedback (done, check it) and one for EvidenceRequest (still pending, keep unchecked)."
+    },
+    {
+      "id": "f5",
+      "severity": "low",
+      "confidence": "medium",
+      "category": "verification",
+      "statement": "The 4 manual end-to-end verification items in tasks.md (lines 104-107) are all unchecked: evidence→decision object flow, customer-intel case, structured feedback+evidence requests, retrospective→learning memory. These cannot be verified by the supervisor without running a full radar pipeline, but no automated test exercises these paths either (intelligence tests SKIP without existing data).",
+      "evidence": [
+        "openspec/changes/introduce-intelligence-operating-model/tasks.md lines 104-107: all unchecked",
+        "npm test output: [SKIP] Evidence lineage test — no intelligence topics found",
+        "npm test output: [SKIP] Finding backlink test — no intelligence topics found"
+      ],
+      "recommendation": "Consider adding a seed fixture or a minimal synthetic pipeline run in tests that creates a controlled Evidence→Finding→DecisionObject chain so the backlink tests can run automatically instead of SKIP-ing."
+    }
+  ],
+  "recommended_next_focus": [
+    "Add evidenceRequestStore.save() call in onApply alongside feedbackStore.save() and expose evidence request entry in the /review decision command flow",
+    "Begin Task 4 pipeline reordering: create DecisionObjects before MeetingRecord, then add DecisionObject-based meeting evaluation as a second pass",
+    "Update tasks.md checkboxes to reflect actual state: HumanReviewFeedback write is DONE, EvidenceRequest write is pending (split Task 5 item 5b)"
+  ],
+  "status": "new"
+}

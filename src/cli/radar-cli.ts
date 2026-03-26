@@ -41,9 +41,10 @@ import { HumanReviewFeedbackStore } from "../state/human-review-feedback-store.j
 import { EvidenceRequestStore } from "../state/evidence-request-store.js"
 import { RetrospectiveCaseStore } from "../state/retrospective-case-store.js"
 import { LearningMemoryStore } from "../state/learning-memory-store.js"
-import { buildReviewConfirm, RESOLUTION_LABELS, FEEDBACK_CLASS_LABELS, type ReviewConfirmResult } from "./review-handler.js"
+import { buildReviewConfirm, buildRetrospectiveConfirm, buildLearningMemoryConfirm, RESOLUTION_LABELS, FEEDBACK_CLASS_LABELS, MISJUDGMENT_LABELS, LEARNING_MEMORY_TYPE_LABELS } from "./review-handler.js"
 import type { IntelligenceTopic } from "../state/intelligence-layout.js"
 import type { ReviewResolution, FeedbackClass } from "../state/human-review-feedback.js"
+import type { EvidenceAvailabilityStatus } from "../state/evidence-request.js"
 import { printState } from "../state/state-printer.js"
 import { summarizeKnowledgeBase, summarizeKnowledgePack, summarizeMeetingCharter, summarizeSearchContext, summarizeKnowledgeBrief } from "../state/context-summary.js"
 import { buildPatchAction } from "./patch-handler.js"
@@ -1179,6 +1180,20 @@ async function main(): Promise<void> {
 
       const humanReason = parts.slice(3).join(" ") || "(no reason provided)"
 
+      // Parse evidence request tokens: evreq:<item>:<priority>[:<availability>]
+      const evidenceRequests: { requestedItem: string; whyItMatters: string; priority: "high" | "medium" | "low"; availabilityStatus: "available_now" | "available_later" | "not_available" | "unknown"; humanNote?: string }[] = []
+      for (const part of parts.slice(3)) {
+        if (part.startsWith("evreq:")) {
+          const segments = part.slice(6).split(":")
+          const requestedItem = segments[0] || ""
+          const priority = (segments[1] as "high" | "medium" | "low") ?? "medium"
+          const availabilityStatus = (segments[2] as "available_now" | "available_later" | "not_available" | "unknown") ?? "unknown"
+          if (requestedItem) {
+            evidenceRequests.push({ requestedItem, whyItMatters: "(no context provided)", priority, availabilityStatus })
+          }
+        }
+      }
+
       const topic = intentId as IntelligenceTopic
       const dObj = decisionObjectStore.load(topic, decisionId)
       if (!dObj) {
@@ -1194,13 +1209,17 @@ async function main(): Promise<void> {
         feedbackClass,
         humanReason,
         reviewedBy: "cli-user",
-        evidenceRequests: [],
-        onApply: (feedback, _requests) => {
+        evidenceRequests,
+        onApply: (feedback, requests) => {
           feedbackStore.save(feedback)
+          for (const req of requests) {
+            evidenceRequestStore.save(req)
+          }
           console.log(`\n✓ Structured review feedback written: ${feedback.feedbackId}`)
           console.log(`  Decision: ${RESOLUTION_LABELS[feedback.resolution]}`)
           console.log(`  Class: ${FEEDBACK_CLASS_LABELS[feedback.feedbackClass]}`)
           if (feedback.humanReason) console.log(`  Reason: ${feedback.humanReason}`)
+          if (requests.length > 0) console.log(`  Evidence requests: ${requests.length} created`)
         },
       })
 

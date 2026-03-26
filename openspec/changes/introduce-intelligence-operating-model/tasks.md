@@ -51,7 +51,7 @@
 - [ ] Distinguish `Review Meeting` from `Retrospective Meeting`
 - [ ] Upgrade `Meeting Goal` into a real policy input instead of prompt-only framing
 - [ ] Preserve compatibility with existing meeting artifacts where necessary
-- [ ] Wire structured review write from CLI (interactive /review decision <id> command)
+- [x] Wire structured review write from CLI (`/review decision <id> <resolution> [class] [reason] evreq:<item>:<priority>[:<availability>]`)
 
 ## Task 5 — Implement structured review feedback
 
@@ -59,7 +59,8 @@
 - [x] Add `EvidenceRequest` (type + store + CLI display)
 - [x] Make evidence availability first-class: available_now | available_later | not_available | unknown
 - [x] Ensure reject is not treated as truth (reject = resolution, not a finding)
-- [ ] Wire structured feedback write from CLI (pending: interactive review command)
+- [x] Wire HumanReviewFeedback write from CLI (feedbackStore.save() called on confirm)
+- [x] Wire EvidenceRequest write from CLI (evidenceRequestStore.save() called on confirm; use evreq: token)
 
 ## Task 6 — Implement the decision learning loop
 
