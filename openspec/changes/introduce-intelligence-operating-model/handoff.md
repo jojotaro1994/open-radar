@@ -26,7 +26,13 @@ This file is the direct handoff for Claude Code or any follow-up implementation 
   - core object types exist
   - JSON-backed stores exist for the five core objects
 
-### ~85% Implementation Complete (Round 3)
+### ~92% Implementation Complete (Round 3)
+
+**What remains (genuine blockers and external dependencies):**
+1. **Pipeline reorder (BLOCKER for full Task 4 completion):** `run-pipeline.ts` creates `MeetingRecord` via `evaluateWithMeetingRoom(signalId, ...)` at line ~437, before DecisionObject creation at ~495. Full meeting governance requires creating DecisionObjects first, then running `evaluateMeetingWithDecisionObjectBundle()` as a second pass. The `evaluateWithMeetingRoom` function signature is tied to `signalId` — it must be refactored or supplemented with a DecisionObject-level variant. **Do NOT remove the legacy path** — preserve `MeetingRecord` creation for backward compatibility during transition.
+2. **Manual verifications (Task 10):** The 4 end-to-end verification items require running a real `/run radar` pipeline to produce actual intelligence data. These cannot be verified without a live radar run.
+3. **ARR/NRR/NDR from LLM:** `opportunityScore` is wired as a proxy. Full `ARR`/`NRR`/`NDR` weighting requires the LLM to produce these fields in `CommercialAssessment` — this is an LLM schema change, not a local code change.
+4. **Scout weak-awareness runtime enforcement:** Envelope types + builders are done. Runtime enforcement requires modifying the Scout phase runner to construct and use `ScoutContextEnvelope` — deferred to Scout runner refactor.
 
 #### Phase 1 — Persistence Model: COMPLETE
 
@@ -324,15 +330,11 @@ The goal is to push this change to **100%**, meaning:
 
 ## Recommended Next Move For Claude Code
 
-Do not start by adding more types.
+The core object chain, governance types, and CLI write paths are all in place (~92% complete).
 
-Start here:
+**Next in priority order:**
 
-1. migrate meeting input/output around `DecisionObject`
-2. upgrade `review-queue.ts` from free-text reason to structured feedback
-3. add persistence for:
-   - `HumanReviewFeedback`
-   - `EvidenceRequest`
-4. only then add retrospective + learning memory
-
-If Claude Code starts by over-designing retrospective before integrating the new core object chain into runtime, it will waste time and create orphan abstractions.
+1. **Pipeline reorder (Task 4 blocker):** Refactor `evaluateWithMeetingRoom` to accept a DecisionObject bundle. Add `evaluateDecisionObjectWithMeetingRoom(decisionObject, findingBundle, meetingCharter)` — keeps `evaluateWithMeetingRoom(signalId, ...)` for backward compatibility. Run the new path after Step 7b.
+2. **Manual verifications (Task 10):** Run a full `/run radar` pipeline, then exercise `/decisions`, `/review decision <id> approve`, `/retro submit`, `/learning add` end-to-end.
+3. **ARR/NRR/NDR from LLM:** When CommercialAssessment schema is extended to include `arr?`, `nrr?`, `ndr?` fields, populate `Finding.metricsContext` and `DecisionObject.metricsImpact.context` with them in `run-pipeline.ts`.
+4. **Scout weak-awareness runtime:** Wire `ScoutContextEnvelope` construction into the Scout phase runner (read LearningMemory stores, pass envelope to scout adapters).

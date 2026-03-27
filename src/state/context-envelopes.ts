@@ -227,6 +227,31 @@ export function buildModelerContextEnvelope(params: {
 }
 
 /**
+ * Build meeting governance guidance from charter + DecisionObject metrics.
+ * Used to produce human-readable guidance for meeting reviewers.
+ */
+export function buildMeetingGuidance(params: {
+  decisionStyle: MeetingCharter["decisionStyle"]
+  priorityBand: DecisionObject["priorityBand"]
+  metricsImpact?: DecisionObject["metricsImpact"]
+}): string {
+  const { decisionStyle, priorityBand, metricsImpact } = params
+  const score = metricsImpact?.context?.notes?.find(n => n.startsWith("opportunityScore="))
+    ?.split("=")[1]
+  const scoreNum = score ? parseFloat(score) : null
+
+  const parts: string[] = []
+  parts.push(`decisionStyle=${decisionStyle}`)
+  parts.push(`priorityBand=${priorityBand}`)
+  if (scoreNum !== null) parts.push(`opportunityScore=${scoreNum}`)
+  if (metricsImpact) {
+    parts.push(`metricsDirection=${metricsImpact.direction}`)
+    parts.push(`metricsStrength=${metricsImpact.strength}`)
+  }
+  return parts.join(" | ")
+}
+
+/**
  * Build a MeetingContextEnvelope for a Review Meeting.
  * Called when preparing DecisionObjects for governance review.
  */

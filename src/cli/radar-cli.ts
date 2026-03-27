@@ -692,6 +692,10 @@ function showFindings(
     lines.push(`[${finding.findingId}] ${finding.findingKind} | ${finding.decisionRelevance}`)
     lines.push(`  ${finding.statement.slice(0, 80)}${finding.statement.length > 80 ? "..." : ""}`)
     lines.push(`  evidence=${finding.supportedByEvidenceIds.length}  agg=${finding.aggregationLevel}`)
+    if (finding.metricsContext?.notes?.length) {
+      const scoreNote = finding.metricsContext.notes.find(n => n.startsWith("opportunityScore="))
+      if (scoreNote) lines.push(`  opportunityScore=${scoreNote.split("=")[1]}`)
+    }
     if (finding.conflictsWithReferenceFactIds.length) {
       lines.push(`  conflictsWithReference=${finding.conflictsWithReferenceFactIds.length}`)
     }
@@ -754,7 +758,8 @@ function showDecisionDetail(
   lines.push(`  ${dObj.statement}`)
   lines.push(`Freshness: ${dObj.freshness}`)
   if (dObj.metricsImpact) {
-    lines.push(`Metrics impact: ${dObj.metricsImpact.direction} / ${dObj.metricsImpact.strength}`)
+    const scoreNote = dObj.metricsImpact.context?.notes?.find(n => n.startsWith("opportunityScore="))
+    lines.push(`Metrics impact: ${dObj.metricsImpact.direction} / ${dObj.metricsImpact.strength}${scoreNote ? ` (${scoreNote})` : ""}`)
   }
 
   // Show linked findings

@@ -87,8 +87,10 @@
 - [x] Add metrics impact to `DecisionObject` (MetricsImpact already in DecisionObject type)
 - [x] Wire metrics into DecisionObject creation: opportunityScore from triage assessment → priorityBand upgrade + MetricsImpact.direction/strength/context (run-pipeline.ts Step 7b)
 - [x] Finding.metricsContext populated from assessment.opportunityScore during Finding creation
-- [ ] Allow meeting policy to weight `ARR`, `NRR`, and `NDR` (runtime weighting in ba-meeting-room.ts — requires meeting policy runtime change; structural prerequisite met via MeetingContextEnvelope.metricsContext)
-- [ ] Allow retrospective logic to explain misjudgment through missing metrics context (RetrospectiveCase.misjudgmentType covers this; runtime explanation wiring deferred)
+- [x] MeetingCharter.decisionStyle wired into commercialImpact inference in ba-meeting-room.ts (aggressive/balanced/conservative thresholds applied to opportunityScore → impact)
+- [x] MeetingContextEnvelope.buildMeetingGuidance() produces guidance string from decisionStyle + priorityBand + metricsImpact (src/state/context-envelopes.ts)
+- [ ] Allow meeting policy to weight actual `ARR`, `NRR`, `NDR` fields (requires LLM to produce arr/nrr/ndr in CommercialAssessment; structural path exists via MetricsImpact.context)
+- [ ] Allow retrospective logic to explain misjudgment through missing metrics context (RetrospectiveCase.misjudgmentType.type covers this; runtime explanation wiring deferred)
 
 ## Task 9 — Expose the model through CLI
 
@@ -107,4 +109,4 @@
 - [ ] Verify one customer-intel case flows from evidence to decision object
 - [ ] Verify one review can generate structured feedback and evidence requests
 - [ ] Verify one retrospective case can generate bounded learning memory
-- [ ] Update `handoff.md` with the final implementation state
+- [x] Update `handoff.md` with the final implementation state (handoff updated to 92% complete, blockers documented)
