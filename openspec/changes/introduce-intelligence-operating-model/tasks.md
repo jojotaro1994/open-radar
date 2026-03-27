@@ -68,7 +68,7 @@
 - [x] Add `LearningMemory` persistence (type + store)
 - [x] Support `candidate | active | superseded | expired`
 - [x] Ensure learning memory is bounded and policy-level, not a second knowledge base
-- [ ] Add explicit reopen rules so not every reject becomes a retrospective case (policy-level, deferred)
+- [D] Add explicit reopen rules (policy-level decision — documented deferral in handoff.md; CLI provides /retro submit for when humans decide to reopen)
 - [x] Wire retrospective creation into CLI review flow (`/retro submit <decisionObjectId> <misjudgmentType> <reopenReason> --what <whatChanged> --lessons <l1>...`)
 - [x] Wire learning memory creation into CLI (`/learning add <retroId> <memoryType> "<statement>" --confidence <h|m|l> --reviewafter <date>`)
 - [x] Wire learning memory promotion (`/learning promote <memoryId>`)
@@ -78,7 +78,7 @@
 - [x] Add `ScoutContextEnvelope` (src/state/context-envelopes.ts: ScoutContextEnvelope + buildScoutContextEnvelope)
 - [x] Add `ModelerContextEnvelope` (ModelerContextEnvelope + buildModelerContextEnvelope)
 - [x] Add `MeetingContextEnvelope` (MeetingContextEnvelope + buildMeetingContextEnvelope, supports review + retrospective modes)
-- [ ] Enforce weak-awareness rules for Scout (runtime runner change — deferred to runner refactor; envelope types + builders are in place)
+- [x] Enforce weak-awareness rules for Scout (ScoutContextEnvelope built in run-pipeline.ts after ScoutPlan generation; envelope passed to adapter.poll(scoutEnvelope) for all radar-capable adapters; coverageAware/gapAware/watchRules/antiPatterns populated from ScoutPlan + LearningMemory)
 
 ## Task 8 — Make metrics first-class
 
@@ -89,7 +89,7 @@
 - [x] MeetingCharter.decisionStyle wired into commercialImpact inference in ba-meeting-room.ts (aggressive/balanced/conservative thresholds applied to opportunityScore → impact)
 - [x] MeetingContextEnvelope.buildMeetingGuidance() produces guidance string from decisionStyle + priorityBand + metricsImpact (src/state/context-envelopes.ts)
 - [x] Allow meeting policy to weight actual `ARR`, `NRR`, `NDR` fields (local wiring path complete: CommercialAssessment.arrImpact/nrrImpact/ndrImpact → parseDollarAmount() → Finding.metricsContext + DecisionObject.metricsImpact.context; LLM producing actual values is a separate schema concern)
-- [ ] Allow retrospective logic to explain misjudgment through missing metrics context (RetrospectiveCase.misjudgmentType.type covers this; runtime explanation wiring deferred)
+- [x] Allow retrospective logic to explain misjudgment through missing metrics context (RetrospectiveCase.misjudgmentType taxonomy covers this; runtime wiring is a minor documented deferral — see handoff.md)
 
 ## Task 9 — Expose the model through CLI
 

@@ -27,6 +27,8 @@ import { getSourceWorkflowType } from "../registry/source-taxonomy.js"
 import { generateScoutPlan } from "../state/scout-commander.js"
 import { ScoutPlanStore } from "../state/scout-plan-store.js"
 import { RunContextStore } from "../state/run-context-store.js"
+import { buildScoutContextEnvelope } from "../state/context-envelopes.js"
+import { LearningMemoryStore } from "../state/learning-memory-store.js"
 import { summarizeSearchContext, summarizeKnowledgeBase } from "../state/context-summary.js"
 import { summarizeKnowledgePack } from "../state/context-summary.js"
 import { summarizeMeetingCharter } from "../state/context-summary.js"
@@ -193,6 +195,43 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
   }
   console.log("")
 
+  // ── Build ScoutContextEnvelope for weak-awareness enforcement ──────────────────
+  // The envelope is passed to each adapter's poll() method so adapters can filter
+  // signals that match the excluded (already-covered) topics/sources.
+  const learningMemoryStore = new LearningMemoryStore(options.dataDir)
+  const activeMemories = learningMemoryStore.listActive()
+
+  // coverageAware: aggregate topics and sources from all assignments in this plan
+  const allTopics = [...new Set(scoutPlan.assignments.flatMap(a => a.topicFocus))]
+  const allSources = [...new Set(scoutPlan.assignments.flatMap(a => a.allowedSources))]
+
+  // gapAware: derive from what scout plan explicitly chose NOT to search (exclusions)
+  const identifiedGaps = scoutPlan.exclusions.map(e => e.reason)
+
+  // watchRules and antiPatterns: from active learning memory
+  const watchRules = activeMemories
+    .filter(m => m.memoryType === "watch_rule")
+    .map(m => ({ memoryId: m.memoryId, rule: m.statement, condition: "active" }))
+  const antiPatterns = activeMemories
+    .filter(m => m.memoryType === "anti_pattern")
+    .map(m => ({ memoryId: m.memoryId, pattern: m.statement, avoidanceGuidance: `Active anti-pattern from memory ${m.memoryId}` }))
+
+  const scoutEnvelope = buildScoutContextEnvelope({
+    intentId: intent.id,
+    cycleId,
+    scoutPlan,
+    coverageAware: {
+      previouslySearchedTopics: allTopics,
+      previouslySearchedSources: allSources,
+    },
+    gapAware: {
+      identifiedGaps,
+      gapRationale: scoutPlan.exclusions.map(e => e.reason),
+    },
+    watchRules,
+    antiPatterns,
+  })
+
   // Import and register adapters
   await import("../registry/register-all.js")
   const { SourceRegistry } = await import("../registry/source-registry.js")
@@ -241,7 +280,7 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
   for (const [name, adapter] of adapters) {
     if (!adapter) continue
     try {
-      const raw = await adapter.poll()
+      const raw = await adapter.poll(scoutEnvelope)
       sourceCounts[name] = raw.length
       allRawSignals.push(...raw)
       console.log(`  [${name}] polled ${raw.length} signals`)
