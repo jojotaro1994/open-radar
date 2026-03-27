@@ -88,6 +88,27 @@ async function triage(signal: any): Promise<{ decision: TriageDecision; reason: 
   return { decision: "deferred", reason: "Below threshold" }
 }
 
+/**
+ * Parse a dollar amount string like "$500K" or "$1.2M" into a numeric value in raw dollars.
+ * Returns undefined if no dollar amount can be parsed.
+ */
+function parseDollarAmount(value: string): number | undefined {
+  if (!value) return undefined
+  // Remove currency symbols and whitespace
+  const cleaned = value.replace(/[$,\s]/g, "")
+  // Handle K (thousands), M (millions), B (billions)
+  const kMatch = cleaned.match(/^(\d+(?:\.\d+)?)K$/i)
+  if (kMatch) return parseFloat(kMatch[1]!) * 1_000
+  const mMatch = cleaned.match(/^(\d+(?:\.\d+)?)M$/i)
+  if (mMatch) return parseFloat(mMatch[1]!) * 1_000_000
+  const bMatch = cleaned.match(/^(\d+(?:\.\d+)?)B$/i)
+  if (bMatch) return parseFloat(bMatch[1]!) * 1_000_000_000
+  // Plain number
+  const plain = parseFloat(cleaned)
+  if (!isNaN(plain)) return plain
+  return undefined
+}
+
 async function triageWithCommercialAnalyst(
   signals: any[],
   scored: any[],
@@ -418,11 +439,17 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
           decisionRelevance,
           statement: assessment?.reasoning ?? `Signal approved: ${sig.title ?? sig.id}`,
           supportedByEvidenceIds: [sig.id],
-          // NOTE: ARR/NRR/NDR fields are not yet on CommercialAssessment.
-          // When they are added, populate them here from the LLM response.
-          // opportunityScore is the currently available commercial relevance proxy.
           metricsContext: assessment?.opportunityScore != null ? {
-            notes: [`opportunityScore=${assessment.opportunityScore}`, `confidence=${assessment.confidence}`],
+            arr: assessment.arrImpact ? parseDollarAmount(assessment.arrImpact) : undefined,
+            nrr: assessment.nrrImpact ? parseDollarAmount(assessment.nrrImpact) : undefined,
+            ndr: assessment.ndrImpact ? parseDollarAmount(assessment.ndrImpact) : undefined,
+            notes: [
+              `opportunityScore=${assessment.opportunityScore}`,
+              `confidence=${assessment.confidence}`,
+              ...(assessment.arrImpact ? [`arrImpact=${assessment.arrImpact}`] : []),
+              ...(assessment.nrrImpact ? [`nrrImpact=${assessment.nrrImpact}`] : []),
+              ...(assessment.ndrImpact ? [`ndrImpact=${assessment.ndrImpact}`] : []),
+            ],
           } : undefined,
           conflictsWithReferenceFactIds: [],
           freshness: new Date().toISOString(),
@@ -555,15 +582,23 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
     // Infer priority band from pain card severity and commercial assessment opportunityScore
     let priorityBand: DecisionObject["priorityBand"] = "medium"
     let bestOpportunityScore: number | null = null
-    // Find the highest opportunityScore among signals in this opportunity
+    let bestArrImpact: string | undefined
+    let bestNrrImpact: string | undefined
+    let bestNdrImpact: string | undefined
+    // Find the highest opportunityScore and collect any arr/nrr/ndr impacts
     if (triageResults) {
       for (const sigId of opp.evidenceIds) {
         const result = triageResults.get(sigId)
-        if (result?.assessment?.opportunityScore != null) {
+        if (!result) continue
+        if (result.assessment?.opportunityScore != null) {
           if (bestOpportunityScore === null || result.assessment.opportunityScore > bestOpportunityScore) {
             bestOpportunityScore = result.assessment.opportunityScore
           }
         }
+        // Collect dollar impacts — prefer the first non-undefined value
+        if (!bestArrImpact && result.assessment?.arrImpact) bestArrImpact = result.assessment.arrImpact
+        if (!bestNrrImpact && result.assessment?.nrrImpact) bestNrrImpact = result.assessment.nrrImpact
+        if (!bestNdrImpact && result.assessment?.ndrImpact) bestNdrImpact = result.assessment.ndrImpact
       }
       // Upgrade priority band based on opportunityScore
       if (bestOpportunityScore !== null) {
@@ -590,7 +625,17 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
       metricsImpact: bestOpportunityScore !== null ? {
         direction: "expansion",
         strength: bestOpportunityScore >= 0.7 ? "direct" : bestOpportunityScore >= 0.4 ? "indirect" : "speculative",
-        context: { arr: undefined, nrr: undefined, ndr: undefined, notes: [`opportunityScore=${bestOpportunityScore}`] },
+        context: {
+          arr: bestArrImpact ? parseDollarAmount(bestArrImpact) : undefined,
+          nrr: bestNrrImpact ? parseDollarAmount(bestNrrImpact) : undefined,
+          ndr: bestNdrImpact ? parseDollarAmount(bestNdrImpact) : undefined,
+          notes: [
+            `opportunityScore=${bestOpportunityScore}`,
+            ...(bestArrImpact ? [`arr=${bestArrImpact}`] : []),
+            ...(bestNrrImpact ? [`nrr=${bestNrrImpact}`] : []),
+            ...(bestNdrImpact ? [`ndr=${bestNdrImpact}`] : []),
+          ],
+        },
       } : undefined,
       ownerSuggestion: undefined,
       freshness: new Date().toISOString(),

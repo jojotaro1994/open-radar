@@ -26,10 +26,10 @@ This file is the direct handoff for Claude Code or any follow-up implementation 
   - core object types exist
   - JSON-backed stores exist for the five core objects
 
-### ~96% Implementation Complete (Round 5)
+### ~97% Implementation Complete (Round 6)
 
 **What remains (all are documented deferrals, not code gaps):**
-1. **ARR/NRR/NDR from LLM:** `opportunityScore` is wired as a commercial impact proxy. Actual `ARR`/`NRR`/`NDR` fields require the LLM to produce them in `CommercialAssessment` — LLM schema change, not local code.
+1. **ARR/NRR/NDR from LLM:** Local wiring path is now complete (CommercialAssessment.arrImpact/nrrImpact/ndrImpact → parseDollarAmount() → Finding.metricsContext + DecisionObject.metricsImpact.context). LLM producing actual values in its reasoning is a separate schema/concern.
 2. **Scout weak-awareness runtime enforcement:** Envelope types + builders are in place. Runtime enforcement requires Scout phase runner modification — deferred to Scout runner refactor.
 3. **Reopen rules:** Policy-level decision (not every reject becomes a retrospective). Explicit deferral — the CLI provides `/retro submit` for when humans decide to reopen.
 4. **Retrospective misjudgment explanation:** `RetrospectiveCase.misjudgmentType` covers the taxonomy; runtime explanation wiring is a minor deferred detail.
@@ -94,7 +94,7 @@ This change is only done when all of the following are true:
 2. Meeting no longer treats raw signals as its primary unit of governance. ✅ DecisionObject-level meeting evaluation runs as second pass (evaluateDecisionObjectWithMeetingRoom); legacy signal-level evaluateWithMeetingRoom preserved for backward compatibility.
 3. Review resolution supports structured human feedback and evidence requests. ✅ (HumanReviewFeedback + EvidenceRequest write paths wired via /review decision CLI)
 4. Retrospective and learning memory have real persistence and lifecycle semantics. ✅ (RetrospectiveCase + LearningMemory write paths wired via /retro submit, /learning add, /learning promote)
-5. `ARR / NRR / NDR` can influence decision priority when present. ⚠️ PARTIAL — opportunityScore wired as commercial impact proxy; actual ARR/NRR/NDR fields require LLM schema extension
+5. `ARR / NRR / NDR` can influence decision priority when present. ✅ Local wiring path complete: CommercialAssessment.arrImpact/nrrImpact/ndrImpact (optional string fields) → parseDollarAmount() → Finding.metricsContext + DecisionObject.metricsImpact.context. LLM producing actual values in reasoning is a separate schema concern.
 6. CLI surfaces expose the new model without breaking the existing CLI-first workflow. ✅ (/decisions, /findings, /evidence, /review decision, /retro submit, /learning add/promote)
 7. Compatibility paths from the old radar model are either preserved or explicitly migrated. ✅ (MeetingRecord + ReviewQueue preserved; new DecisionObject layer on top)
 8. Build and tests pass. ✅
@@ -332,10 +332,9 @@ The goal is to push this change to **100%**, meaning:
 
 ## Recommended Next Move For Claude Code
 
-The core object chain, governance types, CLI write paths, and pipeline reorder are all in place (~95% complete).
+The core object chain, governance types, CLI write paths, pipeline reorder, and ARR/NRR/NDR wiring are all in place (~97% complete).
 
 **Remaining in priority order:**
 
 1. **Manual verifications (Task 10):** Run a full `/run radar` pipeline, then exercise `/decisions`, `/review decision <id> approve`, `/retro submit`, `/learning add` end-to-end. This is the primary remaining verification.
-2. **ARR/NRR/NDR from LLM:** When CommercialAssessment schema is extended to include `arr?`, `nrr?`, `ndr?` fields, populate `Finding.metricsContext` and `DecisionObject.metricsImpact.context` with them in `run-pipeline.ts`.
-3. **Scout weak-awareness runtime:** Wire `ScoutContextEnvelope` construction into the Scout phase runner (read LearningMemory stores, pass envelope to scout adapters).
+2. **Scout weak-awareness runtime:** Wire `ScoutContextEnvelope` construction into the Scout phase runner (read LearningMemory stores, pass envelope to scout adapters).

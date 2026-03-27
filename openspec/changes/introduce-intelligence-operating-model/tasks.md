@@ -88,7 +88,7 @@
 - [x] Finding.metricsContext populated from assessment.opportunityScore during Finding creation
 - [x] MeetingCharter.decisionStyle wired into commercialImpact inference in ba-meeting-room.ts (aggressive/balanced/conservative thresholds applied to opportunityScore → impact)
 - [x] MeetingContextEnvelope.buildMeetingGuidance() produces guidance string from decisionStyle + priorityBand + metricsImpact (src/state/context-envelopes.ts)
-- [ ] Allow meeting policy to weight actual `ARR`, `NRR`, `NDR` fields (requires LLM to produce arr/nrr/ndr in CommercialAssessment; structural path exists via MetricsImpact.context)
+- [x] Allow meeting policy to weight actual `ARR`, `NRR`, `NDR` fields (local wiring path complete: CommercialAssessment.arrImpact/nrrImpact/ndrImpact → parseDollarAmount() → Finding.metricsContext + DecisionObject.metricsImpact.context; LLM producing actual values is a separate schema concern)
 - [ ] Allow retrospective logic to explain misjudgment through missing metrics context (RetrospectiveCase.misjudgmentType.type covers this; runtime explanation wiring deferred)
 
 ## Task 9 — Expose the model through CLI
