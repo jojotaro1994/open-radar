@@ -552,8 +552,25 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
       }
     }
 
-    // Infer priority band from pain card severity if available
+    // Infer priority band from pain card severity and commercial assessment opportunityScore
     let priorityBand: DecisionObject["priorityBand"] = "medium"
+    let bestOpportunityScore: number | null = null
+    // Find the highest opportunityScore among signals in this opportunity
+    if (triageResults) {
+      for (const sigId of opp.evidenceIds) {
+        const result = triageResults.get(sigId)
+        if (result?.assessment?.opportunityScore != null) {
+          if (bestOpportunityScore === null || result.assessment.opportunityScore > bestOpportunityScore) {
+            bestOpportunityScore = result.assessment.opportunityScore
+          }
+        }
+      }
+      // Upgrade priority band based on opportunityScore
+      if (bestOpportunityScore !== null) {
+        if (bestOpportunityScore >= 0.8) priorityBand = "high"
+        else if (bestOpportunityScore <= 0.3) priorityBand = "low"
+      }
+    }
     for (const pcId of painCardIds) {
       const pcPath = path.join(options.dataDir, "pain-cards", `${pcId}.json`)
       if (fs.existsSync(pcPath)) {
@@ -570,7 +587,11 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
       statement: opp.title ?? opp.summary ?? opp.id,
       supportedByFindingIds,
       priorityBand,
-      metricsImpact: undefined,
+      metricsImpact: bestOpportunityScore !== null ? {
+        direction: "expansion",
+        strength: bestOpportunityScore >= 0.7 ? "direct" : bestOpportunityScore >= 0.4 ? "indirect" : "speculative",
+        context: { arr: undefined, nrr: undefined, ndr: undefined, notes: [`opportunityScore=${bestOpportunityScore}`] },
+      } : undefined,
       ownerSuggestion: undefined,
       freshness: new Date().toISOString(),
       createdAt: new Date().toISOString(),

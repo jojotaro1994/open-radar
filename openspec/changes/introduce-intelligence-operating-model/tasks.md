@@ -48,11 +48,12 @@
 
 - [x] Replace raw signal-centered meeting input with `DecisionObject`-centered input (DecisionObjects are now created in pipeline and visible via /decisions)
 - [x] Define canonical review output for governance, not commentary (HumanReviewFeedback + EvidenceRequest types established)
-- [ ] Distinguish `Review Meeting` from `Retrospective Meeting`
-- [ ] Upgrade `Meeting Goal` into a real policy input instead of prompt-only framing
-- [ ] Preserve compatibility with existing meeting artifacts where necessary
-- [x] Wire structured review write from CLI (`/review decision <id> <resolution> [class] [reason] evreq:<item>:<priority>[:<availability>]`)
-
+- [x] MeetingContextEnvelope supports review and retrospective modes (mode: "review" | "retrospective" in context-envelopes.ts)
+- [ ] Distinguish Review Meeting from Retrospective Meeting in runtime (requires ba-meeting-room.ts refactor to accept DecisionObject bundle instead of signalId — BLOCKED on pipeline reorder below)
+- [ ] Pipeline reorder: create DecisionObjects before MeetingRecord, then meeting evaluation as second pass over DecisionObject bundle (BLOCKER for full meeting governance)
+- [ ] Upgrade `Meeting Goal` into a real policy input (MeetingCharter loaded and used; full policy input wiring in meeting evaluation deferred)
+- [x] Preserve compatibility with existing meeting artifacts (MeetingRecord path preserved during transition)
+- [x] Wire structured review write from CLI
 ## Task 5 — Implement structured review feedback
 
 - [x] Replace free-text-only review reason handling with `HumanReviewFeedback` (type + store + CLI display)
@@ -75,21 +76,19 @@
 
 ## Task 7 — Introduce Scout / Modeler / Meeting role projections
 
-- [ ] Add `ScoutContextEnvelope`
-- [ ] Add `ModelerContextEnvelope`
-- [ ] Add `MeetingContextEnvelope`
-- [ ] Enforce weak-awareness rules for Scout:
-  - coverage-aware
-  - gap-aware
-  - conclusion-blind
+- [x] Add `ScoutContextEnvelope` (src/state/context-envelopes.ts: ScoutContextEnvelope + buildScoutContextEnvelope)
+- [x] Add `ModelerContextEnvelope` (ModelerContextEnvelope + buildModelerContextEnvelope)
+- [x] Add `MeetingContextEnvelope` (MeetingContextEnvelope + buildMeetingContextEnvelope, supports review + retrospective modes)
+- [ ] Enforce weak-awareness rules for Scout (runtime runner change — deferred to runner refactor; envelope types + builders are in place)
 
 ## Task 8 — Make metrics first-class
 
 - [x] Add metrics context to `Finding` (MetricsContext already in Finding type)
 - [x] Add metrics impact to `DecisionObject` (MetricsImpact already in DecisionObject type)
-- [ ] Allow meeting policy to weight `ARR`, `NRR`, and `NDR`
-- [ ] Allow retrospective logic to explain misjudgment through missing metrics context
-- [ ] Wire metrics into finding creation from LLM assessment data
+- [x] Wire metrics into DecisionObject creation: opportunityScore from triage assessment → priorityBand upgrade + MetricsImpact.direction/strength/context (run-pipeline.ts Step 7b)
+- [x] Finding.metricsContext populated from assessment.opportunityScore during Finding creation
+- [ ] Allow meeting policy to weight `ARR`, `NRR`, and `NDR` (runtime weighting in ba-meeting-room.ts — requires meeting policy runtime change; structural prerequisite met via MeetingContextEnvelope.metricsContext)
+- [ ] Allow retrospective logic to explain misjudgment through missing metrics context (RetrospectiveCase.misjudgmentType covers this; runtime explanation wiring deferred)
 
 ## Task 9 — Expose the model through CLI
 

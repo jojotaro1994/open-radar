@@ -26,88 +26,70 @@ This file is the direct handoff for Claude Code or any follow-up implementation 
   - core object types exist
   - JSON-backed stores exist for the five core objects
 
-### ~55% Implementation Complete (Round 1)
+### ~85% Implementation Complete (Round 3)
 
 #### Phase 1 — Persistence Model: COMPLETE
 
-The following files were added as the first implementation slice:
-
 - `src/state/intelligence-layout.ts`
 - `src/state/intelligence-store-utils.ts`
-- `src/state/reference-fact.ts`
-- `src/state/reference-fact-store.ts`
-- `src/state/evidence.ts`
-- `src/state/evidence-store.ts`
-- `src/state/finding.ts`
-- `src/state/finding-store.ts`
-- `src/state/decision-object.ts`
-- `src/state/decision-object-store.ts`
-- `src/state/action-asset.ts`
-- `src/state/action-asset-store.ts`
+- `src/state/reference-fact.ts` + `reference-fact-store.ts`
+- `src/state/evidence.ts` + `evidence-store.ts`
+- `src/state/finding.ts` + `finding-store.ts`
+- `src/state/decision-object.ts` + `decision-object-store.ts`
+- `src/state/action-asset.ts` + `action-asset-store.ts`
 
 #### Phase 2 — Governance Types + Stores: COMPLETE
 
-- `src/state/human-review-feedback.ts` — structured feedback type
-- `src/state/human-review-feedback-store.ts` — JSON store
-- `src/state/evidence-request.ts` — evidence request type
-- `src/state/evidence-request-store.ts` — JSON store
-- `src/state/retrospective-case.ts` — retrospective case type
-- `src/state/retrospective-case-store.ts` — JSON store
-- `src/state/learning-memory.ts` — bounded learning memory type
-- `src/state/learning-memory-store.ts` — JSON store
+- `src/state/human-review-feedback.ts` + `-store.ts` — structured feedback
+- `src/state/evidence-request.ts` + `-store.ts` — evidence requests
+- `src/state/retrospective-case.ts` + `-store.ts` — retrospective cases
+- `src/state/learning-memory.ts` + `-store.ts` — bounded learning memory
 
 #### Phase 3 — Pipeline Integration: COMPLETE
 
 - `run-pipeline.ts` Step 3b: Creates Evidence from scored signals
-- `run-pipeline.ts` triage step: Creates Finding for approved signals
-- `run-pipeline.ts` Step 7b: Creates DecisionObject from assembled opportunities
+- `run-pipeline.ts` triage: Creates Finding for approved signals (with metricsContext from opportunityScore)
+- `run-pipeline.ts` Step 7b: Creates DecisionObject from opportunities (with metricsImpact wired from triage opportunityScore; priorityBand upgrade from commercial score)
+- `src/state/context-envelopes.ts`: ScoutContextEnvelope, ModelerContextEnvelope, MeetingContextEnvelope with builder helpers
 
 #### Phase 4 — CLI Exposure: COMPLETE
 
-- `src/cli/review-handler.ts` — structured review confirmation builder
-- `/decisions` — list all DecisionObjects
-- `/findings` — list all Findings
-- `/evidence` — list all Evidence
+- `src/cli/review-handler.ts`: buildReviewConfirm, buildRetrospectiveConfirm, buildLearningMemoryConfirm + label maps
+- `/decisions`, `/findings`, `/evidence` — list commands
 - `/review decision <id>` — show DecisionObject detail
-- `/review decision <id> <resolution> [class] [reason]` — write structured feedback
-- `/review feedback` — show review feedback summary
-- `/retrospective` — list retrospective cases
-- `/learning` — show learning memory by status
+- `/review decision <id> <resolution> [class] [reason] [evreq:<item>:<priority>[:<avail>]]` — write feedback + evidence requests
+- `/review feedback` — feedback summary
+- `/retrospective` — list; `/retro submit <id> <misjudgmentType> <reason> --what <changed> --lessons <l1>...` — create
+- `/learning` — display; `/learning add <retroId> <type> "<stmt>" --confidence <h|m|l> --reviewafter <date>` — create; `/learning promote <id>` — promote to active
 
-#### What This Means
+#### What Remains ( blockers)
 
-- the canonical storage model is present in code
-- the five core ontology objects have first-class TypeScript definitions and filesystem-backed stores
-- governance types (HumanReviewFeedback, EvidenceRequest, RetrospectiveCase, LearningMemory) have types + stores
-- Evidence → Finding → DecisionObject chain is wired in run-pipeline.ts
-- CLI fully exposes the new model
-- old radar-era runtime (MeetingRecord, ReviewQueue with signalId) remains compatible
+**Pipeline reorder (BLOCKER for Task 4 full completion):**
+- `run-pipeline.ts` still creates MeetingRecord via `evaluateWithMeetingRoom(signalId, ...)` at line ~437 before DecisionObject creation at ~495
+- Full meeting governance requires: DecisionObjects created first, then `evaluateWithMeetingRoom(decisionObjectBundle)` as second pass
+- Do NOT remove legacy MeetingRecord path yet — preserve for backward compatibility during transition
 
-#### What Remains
+**Partially complete (structural prerequisites met, runtime wiring deferred):**
+- MeetingContextEnvelope mode ("review" | "retrospective") defined but runtime meeting evaluation not yet refactored to use it
+- `ba-meeting-room.ts` still takes `signalId` not `DecisionObject` bundle — this is the structural change needed for Task 4
+- Metrics: opportunityScore wired into DecisionObject.metricsImpact; meeting policy ARR/NRR/NDR weighting deferred to ba-meeting-room.ts refactor
 
-- Review Meeting vs Retrospective Meeting distinction (type-level distinction exists but meeting flows not separated)
-- Retrospective and LearningMemory CLI write flows (types+stores done, interactive commands not yet)
-- Scout/Modeler/Meeting context envelopes (not yet defined)
-- Metrics-driven priority weighting (types exist, not yet wired to meeting policy)
-- EvidenceRequest write from CLI (interactive mode)
+**Policy-level (explicit deferral):**
+- Reopen rules: not every reject becomes a retrospective — policy-level decision, documented but not enforced in CLI
+- Scout weak-awareness enforcement: envelope types + builders done, runtime enforcement requires Scout phase runner change
 
 ## What 100% Means
 
 This change is only done when all of the following are true:
 
-1. The runtime can persist and consume the new object chain:
-   - `ReferenceFact`
-   - `Evidence`
-   - `Finding`
-   - `DecisionObject`
-   - `ActionAsset`
-2. Meeting no longer treats raw signals as its primary unit of governance.
-3. Review resolution supports structured human feedback and evidence requests.
-4. Retrospective and learning memory have real persistence and lifecycle semantics.
-5. `ARR / NRR / NDR` can influence decision priority when present.
-6. CLI surfaces expose the new model without breaking the existing CLI-first workflow.
-7. Compatibility paths from the old radar model are either preserved or explicitly migrated.
-8. Build and tests pass.
+1. The runtime can persist and consume the new object chain: ✅ (ReferenceFact, Evidence, Finding, DecisionObject, ActionAsset — all types + stores exist; Evidence→Finding→DecisionObject chain wired in run-pipeline.ts)
+2. Meeting no longer treats raw signals as its primary unit of governance. ⚠️ PARTIAL — DecisionObjects created in pipeline; full governance requires ba-meeting-room.ts refactor (BLOCKER: pipeline reorder)
+3. Review resolution supports structured human feedback and evidence requests. ✅ (HumanReviewFeedback + EvidenceRequest write paths wired via /review decision CLI)
+4. Retrospective and learning memory have real persistence and lifecycle semantics. ✅ (RetrospectiveCase + LearningMemory write paths wired via /retro submit, /learning add, /learning promote)
+5. `ARR / NRR / NDR` can influence decision priority when present. ⚠️ PARTIAL — opportunityScore from CommercialAssessment wired into DecisionObject.metricsImpact + priorityBand upgrade; full ARR/NRR/NDR weighting requires LLM schema extension + ba-meeting-room.ts policy change
+6. CLI surfaces expose the new model without breaking the existing CLI-first workflow. ✅ (/decisions, /findings, /evidence, /review decision, /retro submit, /learning add/promote)
+7. Compatibility paths from the old radar model are either preserved or explicitly migrated. ✅ (MeetingRecord + ReviewQueue preserved; new DecisionObject layer on top)
+8. Build and tests pass. ✅
 
 ## Implementation Strategy
 
