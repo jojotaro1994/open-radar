@@ -149,3 +149,106 @@ export function evaluateWithMeetingRoom(
 
   return meetingRecord
 }
+
+/**
+ * Evaluate a DecisionObject at the meeting governance level.
+ *
+ * This is the DecisionObject-centered equivalent of evaluateWithMeetingRoom.
+ * It reads the DecisionObject's Finding bundle (and their Evidence) to produce
+ * a structured MeetingRecord with a decisionObjectId reference.
+ *
+ * Currently produces the meeting record using the highest-confidence assessment
+ * among signals in the DecisionObject's evidence bundle. Full multi-signal
+ * aggregation is the next step.
+ */
+export function evaluateDecisionObjectWithMeetingRoom(
+  decisionObjectId: string,
+  cycleId: string,
+  assessments: Map<string, CommercialAssessment>,
+  meetingCharter: MeetingCharter | undefined,
+  knowledgePack: KnowledgePack | undefined,
+): MeetingRecord {
+  const now = new Date().toISOString()
+
+  // Aggregate across all signals in the bundle — use the highest opportunityScore assessment
+  let bestAssessment: CommercialAssessment | null = null
+  for (const [, a] of assessments) {
+    if (!bestAssessment || (a.opportunityScore ?? 0) > (bestAssessment.opportunityScore ?? 0)) {
+      bestAssessment = a
+    }
+  }
+
+  const category = bestAssessment ? inferCategory(bestAssessment) : "general"
+  const verticals = bestAssessment ? inferVerticals(bestAssessment) : []
+  const impact = inferImpact(bestAssessment, meetingCharter?.decisionStyle)
+  const fitLevel = bestAssessment ? inferFitLevel(bestAssessment) : "weak"
+
+  const opportunityLens: MeetingRecord["lenses"]["opportunity"] = {
+    conclusion: bestAssessment?.reasoning ?? `DecisionObject ${decisionObjectId} evaluated by BA Meeting Room.`,
+    supportingEvidence: bestAssessment?.missingEvidence ?? [],
+    evidenceGaps: bestAssessment?.missingEvidence ?? [],
+    category,
+    verticals,
+    commercialImpact: impact,
+  }
+
+  const weaknesses: string[] = []
+  const riskFactors: string[] = []
+  if (bestAssessment?.missingEvidence?.length) {
+    weaknesses.push(...bestAssessment.missingEvidence.slice(0, 3))
+  }
+  if (!bestAssessment || (bestAssessment.confidence ?? 0) < 0.5) {
+    riskFactors.push("Low confidence in commercial relevance assessment")
+  }
+  riskFactors.push(`DecisionObject-level evaluation: ${assessments.size} signal assessment(s) aggregated`)
+
+  const skepticLens: MeetingRecord["lenses"]["skeptic"] = {
+    conclusion: weaknesses.length > 0
+      ? `Evidence gaps identified: ${weaknesses.join("; ")}`
+      : "No significant evidence gaps identified.",
+    supportingEvidence: riskFactors,
+    evidenceGaps: bestAssessment?.missingEvidence ?? [],
+    weaknesses,
+    riskFactors,
+  }
+
+  const improvementPaths: string[] = []
+  if (knowledgePack?.knownLimitations?.length) {
+    improvementPaths.push(...knowledgePack.knownLimitations.slice(0, 2))
+  }
+
+  const productFitLens: MeetingRecord["lenses"]["productFit"] = {
+    conclusion: `Product fit assessed as ${fitLevel}. ${improvementPaths.length > 0 ? `Improvement paths: ${improvementPaths.join("; ")}` : ""}`,
+    supportingEvidence: knowledgePack?.productCapabilities?.slice(0, 3).map(c => c.capability) ?? [],
+    evidenceGaps: improvementPaths,
+    fitLevel,
+    improvementPaths,
+  }
+
+  const decisionRationale = bestAssessment
+    ? `[DecisionObject ${decisionObjectId}] [${bestAssessment.category}] ${bestAssessment.reasoning}`
+    : `Rule-based DecisionObject evaluation — no LLM assessment available.`
+
+  const chairLens: MeetingRecord["lenses"]["chair"] = {
+    summary: `DecisionObject ${decisionObjectId} evaluated by BA Meeting Room. Category=${category}, impact=${impact}, fit=${fitLevel}, signals=${assessments.size}.`,
+    finalDecision: "deferred", // DecisionObject-level governance always starts as deferred until human review
+    decisionRationale,
+  }
+
+  const meetingRecord: MeetingRecord = {
+    cycleId,
+    decisionObjectId,
+    evaluatedAt: now,
+    meetingGoalSnapshot: meetingCharter as unknown as Record<string, unknown> ?? {},
+    lenses: {
+      chair: chairLens,
+      opportunity: opportunityLens,
+      skeptic: skepticLens,
+      productFit: productFitLens,
+    },
+    nextEvidenceNeeded: bestAssessment?.missingEvidence ?? [],
+    tags: [bestAssessment?.commercialRelevance ? "commercial" : "non-commercial", category],
+  }
+
+  return meetingRecord
+}

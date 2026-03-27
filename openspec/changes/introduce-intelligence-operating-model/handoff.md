@@ -26,13 +26,13 @@ This file is the direct handoff for Claude Code or any follow-up implementation 
   - core object types exist
   - JSON-backed stores exist for the five core objects
 
-### ~92% Implementation Complete (Round 3)
+### ~95% Implementation Complete (Round 4)
 
 **What remains (genuine blockers and external dependencies):**
-1. **Pipeline reorder (BLOCKER for full Task 4 completion):** `run-pipeline.ts` creates `MeetingRecord` via `evaluateWithMeetingRoom(signalId, ...)` at line ~437, before DecisionObject creation at ~495. Full meeting governance requires creating DecisionObjects first, then running `evaluateMeetingWithDecisionObjectBundle()` as a second pass. The `evaluateWithMeetingRoom` function signature is tied to `signalId` — it must be refactored or supplemented with a DecisionObject-level variant. **Do NOT remove the legacy path** — preserve `MeetingRecord` creation for backward compatibility during transition.
-2. **Manual verifications (Task 10):** The 4 end-to-end verification items require running a real `/run radar` pipeline to produce actual intelligence data. These cannot be verified without a live radar run.
-3. **ARR/NRR/NDR from LLM:** `opportunityScore` is wired as a proxy. Full `ARR`/`NRR`/`NDR` weighting requires the LLM to produce these fields in `CommercialAssessment` — this is an LLM schema change, not a local code change.
-4. **Scout weak-awareness runtime enforcement:** Envelope types + builders are done. Runtime enforcement requires modifying the Scout phase runner to construct and use `ScoutContextEnvelope` — deferred to Scout runner refactor.
+1. **Manual verifications (Task 10):** The 4 end-to-end verification items require running a real `/run radar` pipeline to produce actual intelligence data. These cannot be verified without a live radar run.
+2. **ARR/NRR/NDR from LLM:** `opportunityScore` is wired as a proxy for commercial impact. Full `ARR`/`NRR`/`NDR` weighting requires the LLM to produce these fields in `CommercialAssessment` — this is an LLM schema change, not a local code change.
+3. **Scout weak-awareness runtime enforcement:** Envelope types + builders are in place. Runtime enforcement requires modifying the Scout phase runner to construct and use `ScoutContextEnvelope` — deferred to Scout runner refactor.
+4. **Reopen rules:** Policy-level decision (not every reject becomes a retrospective). Deferred as explicit policy item.
 
 #### Phase 1 — Persistence Model: COMPLETE
 
@@ -56,13 +56,15 @@ This file is the direct handoff for Claude Code or any follow-up implementation 
 - `run-pipeline.ts` Step 3b: Creates Evidence from scored signals
 - `run-pipeline.ts` triage: Creates Finding for approved signals (with metricsContext from opportunityScore)
 - `run-pipeline.ts` Step 7b: Creates DecisionObject from opportunities (with metricsImpact wired from triage opportunityScore; priorityBand upgrade from commercial score)
-- `src/state/context-envelopes.ts`: ScoutContextEnvelope, ModelerContextEnvelope, MeetingContextEnvelope with builder helpers
+- `run-pipeline.ts` DecisionObject second pass: evaluateDecisionObjectWithMeetingRoom() produces DecisionObject-level MeetingRecord with decisionObjectId (after Step 7b)
+- `src/state/ba-meeting-room.ts`: evaluateDecisionObjectWithMeetingRoom() aggregates assessments across signals in DecisionObject bundle; inferImpact() accepts decisionStyle for threshold adjustment
+- `src/state/context-envelopes.ts`: ScoutContextEnvelope, ModelerContextEnvelope, MeetingContextEnvelope with builder helpers + buildMeetingGuidance()
 
 #### Phase 4 — CLI Exposure: COMPLETE
 
-- `src/cli/review-handler.ts`: buildReviewConfirm, buildRetrospectiveConfirm, buildLearningMemoryConfirm + label maps
+- `src/cli/review-handler.ts`: buildReviewConfirm, buildRetrospectiveConfirm, buildLearningMemoryConfirm + MISJUDGMENT_LABELS, LEARNING_MEMORY_TYPE_LABELS
 - `/decisions`, `/findings`, `/evidence` — list commands
-- `/review decision <id>` — show DecisionObject detail
+- `/review decision <id>` — show DecisionObject detail (priorityBand, metricsImpact with opportunityScore)
 - `/review decision <id> <resolution> [class] [reason] [evreq:<item>:<priority>[:<avail>]]` — write feedback + evidence requests
 - `/review feedback` — feedback summary
 - `/retrospective` — list; `/retro submit <id> <misjudgmentType> <reason> --what <changed> --lessons <l1>...` — create
@@ -89,10 +91,10 @@ This file is the direct handoff for Claude Code or any follow-up implementation 
 This change is only done when all of the following are true:
 
 1. The runtime can persist and consume the new object chain: ✅ (ReferenceFact, Evidence, Finding, DecisionObject, ActionAsset — all types + stores exist; Evidence→Finding→DecisionObject chain wired in run-pipeline.ts)
-2. Meeting no longer treats raw signals as its primary unit of governance. ⚠️ PARTIAL — DecisionObjects created in pipeline; full governance requires ba-meeting-room.ts refactor (BLOCKER: pipeline reorder)
+2. Meeting no longer treats raw signals as its primary unit of governance. ✅ DecisionObject-level meeting evaluation runs as second pass (evaluateDecisionObjectWithMeetingRoom); legacy signal-level evaluateWithMeetingRoom preserved for backward compatibility.
 3. Review resolution supports structured human feedback and evidence requests. ✅ (HumanReviewFeedback + EvidenceRequest write paths wired via /review decision CLI)
 4. Retrospective and learning memory have real persistence and lifecycle semantics. ✅ (RetrospectiveCase + LearningMemory write paths wired via /retro submit, /learning add, /learning promote)
-5. `ARR / NRR / NDR` can influence decision priority when present. ⚠️ PARTIAL — opportunityScore from CommercialAssessment wired into DecisionObject.metricsImpact + priorityBand upgrade; full ARR/NRR/NDR weighting requires LLM schema extension + ba-meeting-room.ts policy change
+5. `ARR / NRR / NDR` can influence decision priority when present. ⚠️ PARTIAL — opportunityScore wired as commercial impact proxy; actual ARR/NRR/NDR fields require LLM schema extension
 6. CLI surfaces expose the new model without breaking the existing CLI-first workflow. ✅ (/decisions, /findings, /evidence, /review decision, /retro submit, /learning add/promote)
 7. Compatibility paths from the old radar model are either preserved or explicitly migrated. ✅ (MeetingRecord + ReviewQueue preserved; new DecisionObject layer on top)
 8. Build and tests pass. ✅
@@ -330,11 +332,10 @@ The goal is to push this change to **100%**, meaning:
 
 ## Recommended Next Move For Claude Code
 
-The core object chain, governance types, and CLI write paths are all in place (~92% complete).
+The core object chain, governance types, CLI write paths, and pipeline reorder are all in place (~95% complete).
 
-**Next in priority order:**
+**Remaining in priority order:**
 
-1. **Pipeline reorder (Task 4 blocker):** Refactor `evaluateWithMeetingRoom` to accept a DecisionObject bundle. Add `evaluateDecisionObjectWithMeetingRoom(decisionObject, findingBundle, meetingCharter)` — keeps `evaluateWithMeetingRoom(signalId, ...)` for backward compatibility. Run the new path after Step 7b.
-2. **Manual verifications (Task 10):** Run a full `/run radar` pipeline, then exercise `/decisions`, `/review decision <id> approve`, `/retro submit`, `/learning add` end-to-end.
-3. **ARR/NRR/NDR from LLM:** When CommercialAssessment schema is extended to include `arr?`, `nrr?`, `ndr?` fields, populate `Finding.metricsContext` and `DecisionObject.metricsImpact.context` with them in `run-pipeline.ts`.
-4. **Scout weak-awareness runtime:** Wire `ScoutContextEnvelope` construction into the Scout phase runner (read LearningMemory stores, pass envelope to scout adapters).
+1. **Manual verifications (Task 10):** Run a full `/run radar` pipeline, then exercise `/decisions`, `/review decision <id> approve`, `/retro submit`, `/learning add` end-to-end. This is the primary remaining verification.
+2. **ARR/NRR/NDR from LLM:** When CommercialAssessment schema is extended to include `arr?`, `nrr?`, `ndr?` fields, populate `Finding.metricsContext` and `DecisionObject.metricsImpact.context` with them in `run-pipeline.ts`.
+3. **Scout weak-awareness runtime:** Wire `ScoutContextEnvelope` construction into the Scout phase runner (read LearningMemory stores, pass envelope to scout adapters).

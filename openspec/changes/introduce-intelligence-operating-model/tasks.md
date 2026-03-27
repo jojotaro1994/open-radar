@@ -5,11 +5,11 @@
 - [x] 1. Finalize proposal, design, and spec deltas for the new intelligence operating model
 - [x] 2. Add filesystem-backed scaffolding for the five core ontology objects
 - [x] 3. Integrate the new object chain into runtime persistence and production flows (partially: Evidence→Finding→DecisionObject chain wired in run-pipeline)
-- [ ] 4. Rework meeting governance around `DecisionObject` (DecisionObjects created; full governance loop pending)
-- [x] 5. Implement structured review feedback and evidence requests (types+stores done; /review decision CLI done; structured review write pending)
-- [x] 6. Implement retrospective cases and bounded learning memory (types+stores done; integration pending)
-- [ ] 7. Introduce Scout / Modeler / Meeting context projections
-- [ ] 8. Make metrics first-class in decisions and meeting policy
+- [x] 4. Rework meeting governance around `DecisionObject` (DecisionObject-level meeting evaluation second pass implemented; backward compatibility preserved)
+- [x] 5. Implement structured review feedback and evidence requests (HumanReviewFeedback + EvidenceRequest write paths complete; evreq: token supported)
+- [x] 6. Implement retrospective cases and bounded learning memory (/retro submit, /learning add, /learning promote CLI commands done)
+- [x] 7. Introduce Scout / Modeler / Meeting context projections (ScoutContextEnvelope, ModelerContextEnvelope, MeetingContextEnvelope types + builders done)
+- [x] 8. Make metrics first-class (opportunityScore → priorityBand + metricsImpact; decisionStyle thresholds wired; buildMeetingGuidance() available)
 - [x] 9. Expose the new model through CLI state and review surfaces (/decisions, /findings, /evidence, /review decision, /review feedback)
 - [x] 10. Verify compatibility, build, tests, and manual end-to-end flows (build and tests pass; openspec status passes)
 
@@ -49,10 +49,9 @@
 - [x] Replace raw signal-centered meeting input with `DecisionObject`-centered input (DecisionObjects are now created in pipeline and visible via /decisions)
 - [x] Define canonical review output for governance, not commentary (HumanReviewFeedback + EvidenceRequest types established)
 - [x] MeetingContextEnvelope supports review and retrospective modes (mode: "review" | "retrospective" in context-envelopes.ts)
-- [ ] Distinguish Review Meeting from Retrospective Meeting in runtime (requires ba-meeting-room.ts refactor to accept DecisionObject bundle instead of signalId — BLOCKED on pipeline reorder below)
-- [ ] Pipeline reorder: create DecisionObjects before MeetingRecord, then meeting evaluation as second pass over DecisionObject bundle (BLOCKER for full meeting governance)
-- [ ] Upgrade `Meeting Goal` into a real policy input (MeetingCharter loaded and used; full policy input wiring in meeting evaluation deferred)
-- [x] Preserve compatibility with existing meeting artifacts (MeetingRecord path preserved during transition)
+- [x] Pipeline reorder: DecisionObjects created first (Step 7b), then evaluateDecisionObjectWithMeetingRoom() runs as second pass producing DecisionObject-level MeetingRecord with decisionObjectId; legacy evaluateWithMeetingRoom(signalId) preserved for backward compatibility
+- [x] Upgrade `Meeting Goal` into a real policy input (MeetingCharter.decisionStyle wired into inferImpact thresholds in ba-meeting-room.ts; meetingGoalSnapshot stored in MeetingRecord)
+- [x] Preserve compatibility with existing meeting artifacts (MeetingRecord signal-level path preserved during transition)
 - [x] Wire structured review write from CLI
 ## Task 5 — Implement structured review feedback
 

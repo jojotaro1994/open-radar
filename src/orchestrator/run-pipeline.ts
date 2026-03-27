@@ -32,7 +32,7 @@ import { summarizeKnowledgePack } from "../state/context-summary.js"
 import { summarizeMeetingCharter } from "../state/context-summary.js"
 import { summarizeKnowledgeBrief } from "../state/context-summary.js"
 import { MeetingRecordStore } from "../state/meeting-record-store.js"
-import { evaluateWithMeetingRoom } from "../state/ba-meeting-room.js"
+import { evaluateWithMeetingRoom, evaluateDecisionObjectWithMeetingRoom } from "../state/ba-meeting-room.js"
 import { EvidenceStore } from "../state/evidence-store.js"
 import { FindingStore } from "../state/finding-store.js"
 import { DecisionObjectStore } from "../state/decision-object-store.js"
@@ -599,6 +599,26 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
     }
     decisionObjectStore.save(intelligenceTopic, decisionObject)
     decisionObjectCount++
+
+    // ── DecisionObject-level meeting governance (second pass) ─────────────────
+    // Build assessment map for all signals in this opportunity's evidence bundle
+    const bundleAssessments = new Map<string, import("../schemas/commercial-assessment.js").CommercialAssessment>()
+    for (const sigId of opp.evidenceIds) {
+      const result = triageResults?.get(sigId)
+      if (result?.assessment) {
+        bundleAssessments.set(sigId, result.assessment)
+      }
+    }
+    if (bundleAssessments.size > 0) {
+      const meetingRecord = evaluateDecisionObjectWithMeetingRoom(
+        opp.id,
+        cycleId,
+        bundleAssessments,
+        options.meetingCharter,
+        options.knowledgePack,
+      )
+      meetingRecordStore.save(meetingRecord)
+    }
   }
   console.log(`  DecisionObjects created: ${decisionObjectCount}\n`)
 
