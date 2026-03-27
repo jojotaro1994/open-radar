@@ -1,0 +1,62 @@
+{
+  "review_id": "review-20260327-0203",
+  "created_at": "2026-03-27T02:03:00+08:00",
+  "reviewer": "claude-code-supervisor",
+  "target_change": "introduce-intelligence-operating-model",
+  "scope": [
+    "architecture",
+    "runtime-integration",
+    "meeting-governance",
+    "decision-learning-loop",
+    "metrics-intelligence",
+    "cli-surface"
+  ],
+  "repo_state_summary": "Commit 447cae8 confirmed: EvidenceRequest write path wired (evidenceRequestStore.save() at radar-cli.ts:1216), tasks.md updated. All 9 object types/stores and CLI read paths for RetrospectiveCase and LearningMemory exist. buildRetrospectiveConfirm and buildLearningMemoryConfirm implemented in review-handler.ts. However, /retrospective and /learning commands are read-only (show only) — no CLI command creates new RetrospectiveCase or LearningMemory objects. Stores are instantiated (lines 891-892) but never written to. Pipeline ordering unchanged. 18 files uncommitted.",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "high",
+      "confidence": "high",
+      "category": "missing-integration",
+      "statement": "RetrospectiveCase and LearningMemory CLI write paths are not wired. buildRetrospectiveConfirm and buildLearningMemoryConfirm exist in review-handler.ts, and RetrospectiveCaseStore + LearningMemoryStore are instantiated in radar-cli.ts (lines 891-892), but no CLI command calls .save() on either store. /retrospective and /learning are read-only list commands. The entire Task 6 write flow is incomplete.",
+      "evidence": [
+        "src/cli/radar-cli.ts:891-892: retrospectiveStore and learningMemoryStore instantiated",
+        "grep for retrospectiveCaseStore.save and learningMemoryStore.save across src/ returns zero matches",
+        "src/cli/radar-cli.ts lines 1238-1242: /retrospective is read-only (showRetrospectives function only)",
+        "src/cli/radar-cli.ts lines 1246-1250: /learning is read-only (showLearningMemory function only)"
+      ],
+      "recommendation": "Add a CLI command to create RetrospectiveCase from a reviewed DecisionObject, e.g. /retro submit <decisionObjectId> <reopenReason>. Wire buildRetrospectiveConfirm into the command handler and call retrospectiveStore.save() in onApply. Then add /learning add <retroId> similarly for LearningMemory."
+    },
+    {
+      "id": "f2",
+      "severity": "high",
+      "confidence": "high",
+      "category": "drift",
+      "statement": "Pipeline ordering unchanged: run-pipeline.ts still creates MeetingRecord (line 436) before DecisionObject (line 496). ba-meeting-room.ts evaluateWithMeetingRoom(signalId, ...) still takes signalId, not DecisionObject. Task 4 remains the critical structural gap. This was deferred in round 2.",
+      "evidence": [
+        "src/orchestrator/run-pipeline.ts lines 436-445: evaluateWithMeetingRoom per signal during triage",
+        "src/orchestrator/run-pipeline.ts line 496: DECISION OBJECT CREATION Step 7b",
+        "src/state/ba-meeting-room.ts: evaluateWithMeetingRoom(signalId, ...) — no DecisionObject parameter"
+      ],
+      "recommendation": "Begin pipeline reordering: move Step 7b DecisionObject creation before meeting evaluation. Then add a second evaluation pass over DecisionObject bundles. Preserve legacy MeetingRecord path for backward compatibility during transition."
+    },
+    {
+      "id": "f3",
+      "severity": "medium",
+      "confidence": "high",
+      "category": "consistency",
+      "statement": "18 files are uncommitted. While some are likely part of the intelligence-operating-model change (knowledge-pack, meeting-charter, search-context updates), openspec/changes/recenter-cli-radar-copilot/proposal.md and tasks.md are also uncommitted. If these recenter-cli changes are intentional cross-change syncs, they should be committed separately to maintain change boundary clarity.",
+      "evidence": [
+        "git diff --stat HEAD: 18 files changed, 411 insertions(+), 176 deletions(-)",
+        "openspec/changes/recenter-cli-radar-copilot/proposal.md and tasks.md in uncommitted diff"
+      ],
+      "recommendation": "Commit the intelligence-operating-model-related files (src/state/knowledge-pack*, src/state/meeting-charter*, etc.) separately from the recenter-cli-radar-copilot changes. Verify that cross-change artifact modifications are intentional."
+    }
+  ],
+  "recommended_next_focus": [
+    "Wire RetrospectiveCase write path: add /retro submit <decisionObjectId> <reopenReason> command that calls retrospectiveStore.save() via buildRetrospectiveConfirm",
+    "Wire LearningMemory write path: add /learning add <retroId> <memoryType> <statement> command that calls learningMemoryStore.save() via buildLearningMemoryConfirm",
+    "Begin Task 4 pipeline reordering: move DecisionObject creation before MeetingRecord, then add DecisionObject-centered meeting evaluation pass"
+  ],
+  "status": "new"
+}

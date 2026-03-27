@@ -1,0 +1,74 @@
+{
+  "review_id": "review-20260327-0332",
+  "created_at": "2026-03-27T03:32:00+08:00",
+  "reviewer": "claude-code-supervisor",
+  "target_change": "introduce-intelligence-operating-model",
+  "scope": [
+    "architecture",
+    "runtime-integration",
+    "meeting-governance",
+    "decision-learning-loop",
+    "metrics-intelligence",
+    "cli-surface"
+  ],
+  "repo_state_summary": "5 consecutive review rounds with no new commits since 447cae8. Build + tests pass. Inbox has 3 unprocessed reviews (0203, 0232, 0302) all with identical HIGH findings. Same 18 uncommitted files. The change appears stalled — core remaining work is well-defined but not progressing.",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "high",
+      "confidence": "high",
+      "category": "missing-integration",
+      "statement": "RetrospectiveCase and LearningMemory CLI write paths remain unwired after 5 consecutive review rounds. Zero matches for retrospectiveCaseStore.save or learningMemoryStore.save across src/. buildRetrospectiveConfirm and buildLearningMemoryConfirm are implemented but never called. This is the most actionable remaining item in Task 6.",
+      "evidence": [
+        "src/cli/radar-cli.ts:891-892: stores instantiated but never written to",
+        "grep across src/ returns zero matches for .save() on either store",
+        "src/cli/radar-cli.ts lines 1238-1250: /retro and /learning are read-only list commands"
+      ],
+      "recommendation": "Add /retro submit <decisionObjectId> <reopenReason> that calls buildRetrospectiveConfirm and persists via retrospectiveStore.save(). Add /learning add <retroId> <memoryType> <statement> that calls buildLearningMemoryConfirm and persists via learningMemoryStore.save(). This is low-effort — the builders already exist."
+    },
+    {
+      "id": "f2",
+      "severity": "high",
+      "confidence": "high",
+      "category": "drift",
+      "statement": "Pipeline ordering unchanged after 5 rounds — run-pipeline.ts creates MeetingRecord before DecisionObject. ba-meeting-room.ts evaluateWithMeetingRoom(signalId, ...) still takes signalId, not DecisionObject. This is the structural blocker for Task 4 and has been deferred every round.",
+      "evidence": [
+        "src/orchestrator/run-pipeline.ts lines 436-445: MeetingRecord per signal during triage",
+        "src/orchestrator/run-pipeline.ts line 496: DECISION OBJECT CREATION Step 7b",
+        "src/state/ba-meeting-room.ts: evaluateWithMeetingRoom(signalId, ...) — no DecisionObject parameter"
+      ],
+      "recommendation": "Begin pipeline reordering. Move Step 7b DecisionObject creation upstream of meeting evaluation. Add a second pass: evaluate DecisionObject+Finding bundle in meeting. Preserve legacy path for backward compatibility."
+    },
+    {
+      "id": "f3",
+      "severity": "high",
+      "confidence": "high",
+      "category": "verification",
+      "statement": "3 inbox reviews (0203, 0232, 0302) are accumulating unprocessed. All flag the same two HIGH issues (retro/learning write + pipeline ordering). After 5 rounds with no commits, the review output channel is not reaching or unblocking the implementer. The change is effectively stalled.",
+      "evidence": [
+        "runtime/agent-reviews/inbox/: 3 unprocessed JSON+MD review pairs",
+        "git log --oneline -1: still 447cae8 — no new commits in 5 review cycles",
+        "Same HIGH findings across rounds 1-5"
+      ],
+      "recommendation": "The implementer should either: (1) process the inbox reviews and act on the findings, (2) state the specific blocker preventing progress, or (3) if the review mechanism isn't working, escalate to a synchronous conversation to unblock."
+    },
+    {
+      "id": "f4",
+      "severity": "medium",
+      "confidence": "high",
+      "category": "consistency",
+      "statement": "18 uncommitted files persist across all review rounds. Cross-change modifications to recenter-cli-radar-copilot artifacts are mixed with intelligence-operating-model files in the same uncommitted diff.",
+      "evidence": [
+        "git diff --stat HEAD: 18 files, 411 insertions(+), 176 deletions(-)",
+        "Same diff since review round 1"
+      ],
+      "recommendation": "Commit intelligence-operating-model files separately from cross-change syncs. This is a 1-minute action that removes noise and maintains change boundary integrity."
+    }
+  ],
+  "recommended_next_focus": [
+    "State a blocker or process inbox reviews — the channel is not working as-is",
+    "Wire RetrospectiveCase and LearningMemory write CLI — this is the most actionable remaining item, builders already exist",
+    "Begin Task 4 pipeline reordering — the single structural change that unblocks meeting governance migration"
+  ],
+  "status": "new"
+}

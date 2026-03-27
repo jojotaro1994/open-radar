@@ -40,7 +40,9 @@ import { EvidenceStore } from "../state/evidence-store.js"
 import { HumanReviewFeedbackStore } from "../state/human-review-feedback-store.js"
 import { EvidenceRequestStore } from "../state/evidence-request-store.js"
 import { RetrospectiveCaseStore } from "../state/retrospective-case-store.js"
+import type { MisjudgmentType } from "../state/retrospective-case.js"
 import { LearningMemoryStore } from "../state/learning-memory-store.js"
+import type { LearningMemoryType } from "../state/learning-memory.js"
 import { buildReviewConfirm, buildRetrospectiveConfirm, buildLearningMemoryConfirm, RESOLUTION_LABELS, FEEDBACK_CLASS_LABELS, MISJUDGMENT_LABELS, LEARNING_MEMORY_TYPE_LABELS } from "./review-handler.js"
 import type { IntelligenceTopic } from "../state/intelligence-layout.js"
 import type { ReviewResolution, FeedbackClass } from "../state/human-review-feedback.js"
@@ -1246,6 +1248,149 @@ async function main(): Promise<void> {
     if (line === "/learning") {
       const output = showLearningMemory(DATA_DIR, learningMemoryStore)
       console.log(output)
+      rl.prompt()
+      return
+    }
+
+    // ── /retro submit <decisionObjectId> <misjudgmentType> <reopenReason> --what <whatChanged> --lessons <l1> <l2>... ──
+    if (line.startsWith("/retro submit ")) {
+      const parts = line.split(" ").filter(Boolean)
+      if (parts.length < 5) {
+        console.log("Usage: /retro submit <decisionObjectId> <misjudgmentType> <reopenReason> --what <whatChanged> --lessons <lesson1> [<lesson2>...]")
+        console.log("  misjudgmentType: interpretation_error | missing_evidence | timing_error | priority_error | reference_conflict_missed")
+        rl.prompt()
+        return
+      }
+      const decisionObjectId = parts[2]!
+      const misjudgmentTypeRaw = parts[3]!.toLowerCase()
+      const validMisjudgmentTypes = ["interpretation_error", "missing_evidence", "timing_error", "priority_error", "reference_conflict_missed"]
+      if (!validMisjudgmentTypes.includes(misjudgmentTypeRaw)) {
+        console.log(`Invalid misjudgmentType "${misjudgmentTypeRaw}". Valid: ${validMisjudgmentTypes.join(", ")}`)
+        rl.prompt()
+        return
+      }
+
+      // Collect reopenReason up to --what
+      const whatIdx = parts.findIndex((p, i) => i > 3 && p === "--what")
+      if (whatIdx === -1) { console.log("Missing --what flag"); rl.prompt(); return }
+      const reopenReason = parts.slice(4, whatIdx).join(" ") || "(no reason)"
+
+      // Find --lessons
+      const lessonsIdx = parts.findIndex((p, i) => i > whatIdx && p === "--lessons")
+      if (lessonsIdx === -1) { console.log("Missing --lessons flag"); rl.prompt(); return }
+      const whatChanged = parts.slice(whatIdx + 1, lessonsIdx).join(" ") || "(not specified)"
+      const lessons = parts.slice(lessonsIdx + 1).filter(l => l.trim())
+
+      // Load DecisionObject to verify it exists
+      const topic = intentId as IntelligenceTopic
+      const dObj = decisionObjectStore.load(topic, decisionObjectId)
+      if (!dObj) {
+        console.log(`Decision object "${decisionObjectId}" not found.`)
+        rl.prompt()
+        return
+      }
+      // Get original resolution from most recent review feedback
+      const priorFeedback = feedbackStore.listByDecisionObject(decisionObjectId)
+      const originalResolution = priorFeedback.length > 0 ? priorFeedback[priorFeedback.length - 1]!.resolution : "no prior review"
+
+      const result = buildRetrospectiveConfirm({
+        originalDecisionObjectId: decisionObjectId,
+        originalResolution,
+        reopenReason,
+        whatChanged,
+        misjudgmentType: misjudgmentTypeRaw as any,
+        lessons: lessons.length > 0 ? lessons : ["(no lessons recorded)"],
+        onApply: (retro) => {
+          retrospectiveStore.save(retro)
+          console.log(`\n✓ Retrospective case created: ${retro.retrospectiveCaseId}`)
+          console.log(`  Decision: ${retro.originalDecisionObjectId} | Misjudgment: ${retro.misjudgmentType}`)
+          console.log(`  Lessons: ${retro.lessons.length}`)
+        },
+      })
+
+      pendingConfirm = {
+        onConfirm: () => { result.onConfirm(); return result.preview + "\n\n✓ Confirmed." },
+        onCancel: () => result.onCancel(),
+      }
+      console.log(`\n── /retro submit ${decisionObjectId} ───────────────────`)
+      console.log(result.preview)
+      rl.prompt()
+      return
+    }
+
+    // ── /learning add <retroId> <memoryType> "<statement>" --confidence <h|m|l> --reviewafter <date> ──
+    if (line.startsWith("/learning add ")) {
+      const parts = line.split(" ").filter(Boolean)
+      if (parts.length < 6) {
+        console.log("Usage: /learning add <retroId> <memoryType> \"<statement>\" --confidence <high|medium|low> --reviewafter <YYYY-MM-DD>")
+        console.log("  memoryType: decision_heuristic | evidence_policy | anti_pattern | blind_spot | watch_rule")
+        rl.prompt()
+        return
+      }
+      const retroId = parts[2]!
+      const memoryTypeRaw = parts[3]!.toLowerCase()
+      const validMemoryTypes = ["decision_heuristic", "evidence_policy", "anti_pattern", "blind_spot", "watch_rule"]
+      if (!validMemoryTypes.includes(memoryTypeRaw)) {
+        console.log(`Invalid memoryType "${memoryTypeRaw}". Valid: ${validMemoryTypes.join(", ")}`)
+        rl.prompt()
+        return
+      }
+
+      // Statement is quoted, find it between index 4 and --confidence
+      const confidenceIdx = parts.findIndex((p, i) => i > 4 && p === "--confidence")
+      if (confidenceIdx === -1) { console.log("Missing --confidence flag"); rl.prompt(); return }
+      const statement = parts.slice(4, confidenceIdx).join(" ").replace(/^"(.*)"$/, "$1") || "(no statement)"
+
+      const confidenceRaw = parts[confidenceIdx + 1]?.toLowerCase()
+      const confidence = (confidenceRaw === "h" || confidenceRaw === "high") ? "high" as const
+        : (confidenceRaw === "l" || confidenceRaw === "low") ? "low" as const
+        : "medium" as const
+
+      const reviewafterIdx = parts.findIndex((p, i) => i > confidenceIdx && p === "--reviewafter")
+      const reviewAfter = reviewafterIdx !== -1 ? parts[reviewafterIdx + 1]! : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+      // Verify retro exists
+      const retro = retrospectiveStore.load(retroId)
+      if (!retro) {
+        console.log(`Retrospective case "${retroId}" not found.`)
+        rl.prompt()
+        return
+      }
+
+      const result = buildLearningMemoryConfirm({
+        derivedFromRetrospectiveCaseIds: [retroId],
+        memoryType: memoryTypeRaw as any,
+        statement,
+        confidence,
+        reviewAfter,
+        onApply: (memory) => {
+          learningMemoryStore.save(memory)
+          console.log(`\n✓ Learning memory created: ${memory.memoryId}`)
+          console.log(`  Type: ${memory.memoryType} | Status: candidate | Confidence: ${memory.confidence}`)
+        },
+      })
+
+      pendingConfirm = {
+        onConfirm: () => { result.onConfirm(); return result.preview + "\n\n✓ Confirmed." },
+        onCancel: () => result.onCancel(),
+      }
+      console.log(`\n── /learning add ${retroId} ───────────────────`)
+      console.log(result.preview)
+      rl.prompt()
+      return
+    }
+
+    // ── /learning promote <memoryId> ──────────────────────────────────────────
+    if (line.startsWith("/learning promote ")) {
+      const parts = line.split(" ").filter(Boolean)
+      const memoryId = parts[2]
+      if (!memoryId) { console.log("Usage: /learning promote <memoryId>"); rl.prompt(); return }
+      const memory = learningMemoryStore.load(memoryId)
+      if (!memory) { console.log(`Learning memory "${memoryId}" not found.`); rl.prompt(); return }
+      if (memory.status === "active") { console.log(`Memory "${memoryId}" is already active.`); rl.prompt(); return }
+      if (memory.status === "expired") { console.log(`Memory "${memoryId}" is expired and cannot be promoted.`); rl.prompt(); return }
+      learningMemoryStore.save({ ...memory, status: "active", updatedAt: new Date().toISOString() })
+      console.log(`\n✓ Learning memory "${memoryId}" promoted to active.`)
       rl.prompt()
       return
     }

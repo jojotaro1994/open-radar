@@ -1,0 +1,61 @@
+{
+  "review_id": "review-20260327-0232",
+  "created_at": "2026-03-27T02:32:00+08:00",
+  "reviewer": "claude-code-supervisor",
+  "target_change": "introduce-intelligence-operating-model",
+  "scope": [
+    "architecture",
+    "runtime-integration",
+    "meeting-governance",
+    "decision-learning-loop",
+    "metrics-intelligence",
+    "cli-surface"
+  ],
+  "repo_state_summary": "No new commits since 447cae8 (Round 2). Working tree state unchanged from last review. Build + tests pass. review-20260327-0203 findings still unresolved: RetrospectiveCase and LearningMemory stores instantiated but never written to (no CLI write path), and pipeline ordering unchanged. 18 uncommitted files remain.",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "high",
+      "confidence": "high",
+      "category": "missing-integration",
+      "statement": "RetrospectiveCase and LearningMemory CLI write paths still not wired. grep confirms zero matches for retrospectiveCaseStore.save and learningMemoryStore.save across entire src/. Stores are instantiated (lines 891-892 of radar-cli.ts) and buildRetrospectiveConfirm + buildLearningMemoryConfirm exist in review-handler.ts, but no command creates or persists these objects. /retrospective and /learning remain read-only list commands.",
+      "evidence": [
+        "src/cli/radar-cli.ts:891-892: new RetrospectiveCaseStore, new LearningMemoryStore instantiated",
+        "grep across src/ returns zero matches for retrospectiveCaseStore.save or learningMemoryStore.save",
+        "src/cli/radar-cli.ts lines 1238-1250: /retrospective and /learning are read-only"
+      ],
+      "recommendation": "Add /retro submit <decisionObjectId> <reopenReason> that calls retrospectiveStore.save() via buildRetrospectiveConfirm. Add /learning add <retroId> <memoryType> <statement> that calls learningMemoryStore.save() via buildLearningMemoryConfirm."
+    },
+    {
+      "id": "f2",
+      "severity": "high",
+      "confidence": "high",
+      "category": "drift",
+      "statement": "Pipeline ordering unchanged from previous review. run-pipeline.ts creates MeetingRecord (line 436) before DecisionObject (line 496). ba-meeting-room.ts evaluateWithMeetingRoom(signalId, ...) still takes signalId, not DecisionObject. Task 4 remains the most critical structural gap and has been deferred across multiple review rounds.",
+      "evidence": [
+        "src/orchestrator/run-pipeline.ts lines 436-445: MeetingRecord via evaluateWithMeetingRoom per signal",
+        "src/orchestrator/run-pipeline.ts line 496: DECISION OBJECT CREATION Step 7b",
+        "src/state/ba-meeting-room.ts: evaluateWithMeetingRoom(signalId, ...) — no DecisionObject parameter"
+      ],
+      "recommendation": "Begin pipeline reordering as the single most impactful structural change. Move Step 7b DecisionObject creation upstream of meeting evaluation. Add a second meeting evaluation pass over DecisionObject bundles. Keep legacy path for backward compatibility."
+    },
+    {
+      "id": "f3",
+      "severity": "medium",
+      "confidence": "high",
+      "category": "consistency",
+      "statement": "18 uncommitted files remain — same state as prior review. No new commits since 447cae8. Cross-change recenter-cli-radar-copilot artifact modifications still uncommitted alongside intelligence-operating-model work.",
+      "evidence": [
+        "git log --oneline -1: 447cae8 feat: wire EvidenceRequest write path and fix tasks.md checkboxes (Round 2)",
+        "git diff --stat HEAD: 18 files, 411 insertions(+), 176 deletions(-)"
+      ],
+      "recommendation": "Commit intelligence-operating-model-related files. Separate commits for cross-change syncs. This maintains change boundary clarity in git history."
+    }
+  ],
+  "recommended_next_focus": [
+    "Wire /retro submit command to call retrospectiveStore.save() via buildRetrospectiveConfirm",
+    "Wire /learning add command to call learningMemoryStore.save() via buildLearningMemoryConfirm",
+    "Begin Task 4 pipeline reordering: DecisionObject creation before MeetingRecord"
+  ],
+  "status": "new"
+}

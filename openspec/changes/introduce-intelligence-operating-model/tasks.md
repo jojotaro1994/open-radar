@@ -68,8 +68,10 @@
 - [x] Add `LearningMemory` persistence (type + store)
 - [x] Support `candidate | active | superseded | expired`
 - [x] Ensure learning memory is bounded and policy-level, not a second knowledge base
-- [ ] Add explicit reopen rules so not every reject becomes a retrospective case
-- [ ] Wire retrospective creation into CLI review flow
+- [ ] Add explicit reopen rules so not every reject becomes a retrospective case (policy-level, deferred)
+- [x] Wire retrospective creation into CLI review flow (`/retro submit <decisionObjectId> <misjudgmentType> <reopenReason> --what <whatChanged> --lessons <l1>...`)
+- [x] Wire learning memory creation into CLI (`/learning add <retroId> <memoryType> "<statement>" --confidence <h|m|l> --reviewafter <date>`)
+- [x] Wire learning memory promotion (`/learning promote <memoryId>`)
 
 ## Task 7 — Introduce Scout / Modeler / Meeting role projections
 
@@ -94,7 +96,7 @@
 - [x] Add CLI/state visibility for findings (/findings)
 - [x] Add CLI/state visibility for decision objects (/decisions)
 - [x] Add CLI/state visibility for review feedback and evidence requests (/review decision, /review feedback)
-- [ ] Add CLI/state visibility for retrospective cases and learning memory
+- [x] Add CLI/state visibility for retrospective cases and learning memory (`/retrospective`, `/learning` display; `/retro submit`, `/learning add`, `/learning promote` write paths)
 - [x] Keep CLI as the first-class product form
 
 ## Task 10 — Verify and hand off
