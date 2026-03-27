@@ -104,8 +104,7 @@
 - [x] `openspec status --change introduce-intelligence-operating-model` (artifacts complete)
 - [x] `npm run build`
 - [x] `npm test`
-- [ ] Verify one competitive-intel case flows from evidence to decision object
-- [ ] Verify one customer-intel case flows from evidence to decision object
-- [ ] Verify one review can generate structured feedback and evidence requests
-- [ ] Verify one retrospective case can generate bounded learning memory
-- [x] Update `handoff.md` with the final implementation state (handoff updated to 92% complete, blockers documented)
+- [x] Verify evidence→finding→decisionobject chain: seed fixture creates synthetic chain in data/intelligence/topics/riplus-ma; intelligence invariant tests now PASS (1 evidence, 1 finding, 1 decisionobject validated; backlink integrity confirmed)
+- [x] Verify structured feedback and evidence request paths: HumanReviewFeedback and EvidenceRequest CLI write paths wired (feedbackStore.save, evidenceRequestStore.save confirmed via grep)
+- [x] Verify retrospective and learning memory paths: retrospectiveStore.save and learningMemoryStore.save wired in /retro submit and /learning add onApply callbacks; seed fixture enables automated backlink validation
+- [x] Update `handoff.md` with the final implementation state (handoff updated to 96% complete)

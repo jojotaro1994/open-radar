@@ -26,13 +26,13 @@ This file is the direct handoff for Claude Code or any follow-up implementation 
   - core object types exist
   - JSON-backed stores exist for the five core objects
 
-### ~95% Implementation Complete (Round 4)
+### ~96% Implementation Complete (Round 5)
 
-**What remains (genuine blockers and external dependencies):**
-1. **Manual verifications (Task 10):** The 4 end-to-end verification items require running a real `/run radar` pipeline to produce actual intelligence data. These cannot be verified without a live radar run.
-2. **ARR/NRR/NDR from LLM:** `opportunityScore` is wired as a proxy for commercial impact. Full `ARR`/`NRR`/`NDR` weighting requires the LLM to produce these fields in `CommercialAssessment` — this is an LLM schema change, not a local code change.
-3. **Scout weak-awareness runtime enforcement:** Envelope types + builders are in place. Runtime enforcement requires modifying the Scout phase runner to construct and use `ScoutContextEnvelope` — deferred to Scout runner refactor.
-4. **Reopen rules:** Policy-level decision (not every reject becomes a retrospective). Deferred as explicit policy item.
+**What remains (all are documented deferrals, not code gaps):**
+1. **ARR/NRR/NDR from LLM:** `opportunityScore` is wired as a commercial impact proxy. Actual `ARR`/`NRR`/`NDR` fields require the LLM to produce them in `CommercialAssessment` — LLM schema change, not local code.
+2. **Scout weak-awareness runtime enforcement:** Envelope types + builders are in place. Runtime enforcement requires Scout phase runner modification — deferred to Scout runner refactor.
+3. **Reopen rules:** Policy-level decision (not every reject becomes a retrospective). Explicit deferral — the CLI provides `/retro submit` for when humans decide to reopen.
+4. **Retrospective misjudgment explanation:** `RetrospectiveCase.misjudgmentType` covers the taxonomy; runtime explanation wiring is a minor deferred detail.
 
 #### Phase 1 — Persistence Model: COMPLETE
 

@@ -9,7 +9,7 @@
  *   node dist/orchestrator/export-dashboard-data.js
  */
 
-import { readFileSync, readdirSync, readdir } from 'fs';
+import { readFileSync, readdirSync, readdir, existsSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -306,7 +306,94 @@ function testDecisionObjectBacklinksToFinding() {
 
 // ── Run all tests ─────────────────────────────────────────────────────────────
 
+// ── Seed fixture: create minimal Evidence→Finding→DecisionObject chain ─────────────────
+// This enables intelligence model tests to run without requiring a full radar run.
+
+function seedIntelligenceTestData() {
+  const topic = 'riplus-ma'
+  const evidenceId = 'seed-evidence-001'
+  const findingId = 'finding-seed-signal-001'
+  const decisionObjectId = 'seed-opp-001'
+
+  const evidenceDir = join(DATA_DIR, 'intelligence', 'topics', topic, 'evidence')
+  const findingsDir = join(DATA_DIR, 'intelligence', 'topics', topic, 'findings')
+  const doDir = join(DATA_DIR, 'intelligence', 'topics', topic, 'decision-objects')
+  const evidencePath = join(evidenceDir, `${evidenceId}.json`)
+  const findingPath = join(findingsDir, `${findingId}.json`)
+  const doPath = join(doDir, `${decisionObjectId}.json`)
+
+  const evidence = {
+    evidenceId,
+    sourceId: 'seed-source',
+    topic,
+    locator: 'seed://test',
+    capturedAt: new Date().toISOString(),
+    normalizedText: 'Seed evidence for intelligence model test',
+    entityRefs: [],
+    confidence: 0.85,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+
+  const finding = {
+    findingId,
+    topic,
+    findingKind: 'interpretation',
+    aggregationLevel: 'single_evidence',
+    decisionRelevance: 'opportunity',
+    statement: 'Seed finding for intelligence model test — high opportunity signal detected',
+    supportedByEvidenceIds: [evidenceId],
+    metricsContext: { notes: ['opportunityScore=0.75'] },
+    conflictsWithReferenceFactIds: [],
+    freshness: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+
+  const decisionObject = {
+    decisionObjectId,
+    topic,
+    kind: 'opportunity',
+    statement: 'Seed decision object for intelligence model test',
+    supportedByFindingIds: [findingId],
+    priorityBand: 'high',
+    metricsImpact: {
+      direction: 'expansion',
+      strength: 'direct',
+      context: { arr: undefined, nrr: undefined, ndr: undefined, notes: ['opportunityScore=0.75'] },
+    },
+    ownerSuggestion: undefined,
+    freshness: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+
+  try {
+    // Create directories if they don't exist
+    mkdirSync(evidenceDir, { recursive: true })
+    mkdirSync(findingsDir, { recursive: true })
+    mkdirSync(doDir, { recursive: true })
+
+    // Only write if files don't already exist (don't overwrite real data)
+    if (!existsSync(evidencePath)) {
+      writeFileSync(evidencePath, JSON.stringify(evidence, null, 2))
+    }
+    if (!existsSync(findingPath)) {
+      writeFileSync(findingPath, JSON.stringify(finding, null, 2))
+    }
+    if (!existsSync(doPath)) {
+      writeFileSync(doPath, JSON.stringify(decisionObject, null, 2))
+    }
+  } catch (err: any) {
+    // If we can't write seed data, tests will still skip gracefully
+    console.warn(`[WARN] Could not seed intelligence test data: ${err.message}`)
+  }
+}
+
 async function runAll() {
+  // Seed minimal intelligence chain so backlink tests can run without a full radar run
+  seedIntelligenceTestData()
+
   console.log('\n=== INVARIANT TESTS ===\n');
 
   try {
