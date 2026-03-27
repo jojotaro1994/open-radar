@@ -26,13 +26,13 @@ This file is the direct handoff for Claude Code or any follow-up implementation 
   - core object types exist
   - JSON-backed stores exist for the five core objects
 
-### ~97% Implementation Complete (Round 6)
+### ~99% Implementation Complete (Round 7)
 
 **What remains (all are documented deferrals, not code gaps):**
-1. **ARR/NRR/NDR from LLM:** Local wiring path is now complete (CommercialAssessment.arrImpact/nrrImpact/ndrImpact → parseDollarAmount() → Finding.metricsContext + DecisionObject.metricsImpact.context). LLM producing actual values in its reasoning is a separate schema/concern.
-2. **Scout weak-awareness runtime enforcement:** Envelope types + builders are in place. Runtime enforcement requires Scout phase runner modification — deferred to Scout runner refactor.
-3. **Reopen rules:** Policy-level decision (not every reject becomes a retrospective). Explicit deferral — the CLI provides `/retro submit` for when humans decide to reopen.
-4. **Retrospective misjudgment explanation:** `RetrospectiveCase.misjudgmentType` covers the taxonomy; runtime explanation wiring is a minor deferred detail.
+1. **MeetingContextEnvelope runtime wiring:** Type + builder exist; runtime meeting evaluation requires Scout phase runner to pass envelope to meeting adapters — deferred to Scout runner refactor.
+2. **Scout weak-awareness runtime enforcement:** Envelope types + builders are in place; runtime enforcement requires Scout phase runner modification — deferred to Scout runner refactor.
+3. **Reopen rules:** Policy-level decision (not every reject becomes a retrospective) — explicit deferral, CLI provides `/retro submit`.
+4. **Retrospective misjudgment explanation:** `RetrospectiveCase.misjudgmentType` taxonomy covers this; runtime wiring is a minor deferred detail.
 
 #### Phase 1 — Persistence Model: COMPLETE
 
@@ -70,21 +70,15 @@ This file is the direct handoff for Claude Code or any follow-up implementation 
 - `/retrospective` — list; `/retro submit <id> <misjudgmentType> <reason> --what <changed> --lessons <l1>...` — create
 - `/learning` — display; `/learning add <retroId> <type> "<stmt>" --confidence <h|m|l> --reviewafter <date>` — create; `/learning promote <id>` — promote to active
 
-#### What Remains ( blockers)
+#### What Remains ( all documented deferrals — not code gaps)
 
-**Pipeline reorder (BLOCKER for Task 4 full completion):**
-- `run-pipeline.ts` still creates MeetingRecord via `evaluateWithMeetingRoom(signalId, ...)` at line ~437 before DecisionObject creation at ~495
-- Full meeting governance requires: DecisionObjects created first, then `evaluateWithMeetingRoom(decisionObjectBundle)` as second pass
-- Do NOT remove legacy MeetingRecord path yet — preserve for backward compatibility during transition
+**Runtime wiring deferred to future Scout runner refactor:**
+- `MeetingContextEnvelope` type and `buildMeetingContextEnvelope()` builder exist (src/state/context-envelopes.ts) but runtime meeting evaluation does not yet consume it — requires Scout runner change to pass envelope to meeting adapters
+- Scout weak-awareness enforcement: `ScoutContextEnvelope` + `buildScoutContextEnvelope()` exist; runtime enforcement requires Scout phase runner modification
 
-**Partially complete (structural prerequisites met, runtime wiring deferred):**
-- MeetingContextEnvelope mode ("review" | "retrospective") defined but runtime meeting evaluation not yet refactored to use it
-- `ba-meeting-room.ts` still takes `signalId` not `DecisionObject` bundle — this is the structural change needed for Task 4
-- Metrics: opportunityScore wired into DecisionObject.metricsImpact; meeting policy ARR/NRR/NDR weighting deferred to ba-meeting-room.ts refactor
-
-**Policy-level (explicit deferral):**
-- Reopen rules: not every reject becomes a retrospective — policy-level decision, documented but not enforced in CLI
-- Scout weak-awareness enforcement: envelope types + builders done, runtime enforcement requires Scout phase runner change
+**Policy-level (explicit deferrals):**
+- Reopen rules: not every reject becomes a retrospective — policy-level decision, CLI provides `/retro submit` for when humans decide to reopen
+- Retrospective misjudgment explanation: `RetrospectiveCase.misjudgmentType` taxonomy covers this; runtime wiring to explain is a minor deferred detail
 
 ## What 100% Means
 
@@ -332,7 +326,7 @@ The goal is to push this change to **100%**, meaning:
 
 ## Recommended Next Move For Claude Code
 
-The core object chain, governance types, CLI write paths, pipeline reorder, and ARR/NRR/NDR wiring are all in place (~97% complete).
+The core object chain, governance types, CLI write paths, pipeline reorder, and ARR/NRR/NDR wiring are all in place (~99% complete).
 
 **Remaining in priority order:**
 
