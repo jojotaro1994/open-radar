@@ -27,8 +27,9 @@ import { StagedKnowledgeStore } from "../state/staged-knowledge-store.js"
 import { GraphMappingPlanStore } from "../state/graph-mapping-plan-store.js"
 import { LearningMemoryStore } from "../state/learning-memory-store.js"
 
-export const DATA_DIR = process.env.RADAR_DATA_DIR ?? path.join(process.cwd(), "data")
-export const CONFIG_DIR = path.join(process.cwd(), "config")
+const RADAR_HOME = process.env.RADAR_HOME ?? process.cwd()
+export const DATA_DIR = process.env.RADAR_DATA_DIR ?? path.join(RADAR_HOME, "data")
+export const CONFIG_DIR = path.join(RADAR_HOME, "config")
 
 export interface RadarRuntime {
   intentId: string
