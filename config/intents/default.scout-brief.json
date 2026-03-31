@@ -1,0 +1,17 @@
+{
+  "id": "default-scout-brief",
+  "intentId": "default",
+  "sourceWeights": [],
+  "topicBoosts": [
+    {
+      "term": "evidence-backed relevance",
+      "boost": 0.25
+    }
+  ],
+  "topicSuppressions": [],
+  "recallMode": "normal",
+  "noiseTolerance": 0.5,
+  "searchNotes": "test",
+  "createdAt": "2026-03-31T11:53:31.371Z",
+  "updatedAt": "2026-03-31T11:53:44.044Z"
+}

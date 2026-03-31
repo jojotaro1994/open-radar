@@ -160,7 +160,7 @@ export interface MeetingContextEnvelope {
     arr?: number
     nrr?: number
     ndr?: number
-    notes?: string
+    notes?: string[]
   }>
 
   /** Prior review feedback for these DecisionObjects (if any) */
@@ -263,7 +263,7 @@ export function buildMeetingContextEnvelope(params: {
   findingBundle: Record<string, Finding[]>
   evidenceBundle: Record<string, Evidence[]>
   referenceFacts: ReferenceFact[]
-  metricsContext: Record<string, { arr?: number; nrr?: number; ndr?: number; notes?: string }>
+  metricsContext: Record<string, { arr?: number; nrr?: number; ndr?: number; notes?: string[] }>
   priorFeedback: HumanReviewFeedback[]
   retrospectiveContext?: MeetingContextEnvelope["retrospectiveContext"]
   mode?: MeetingContextMode

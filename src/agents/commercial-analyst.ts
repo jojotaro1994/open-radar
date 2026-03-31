@@ -24,11 +24,13 @@ import type { RadarIntent } from "../schemas/intent.js"
 import type { CommercialAssessment, AssessmentCategory } from "../schemas/commercial-assessment.js"
 import type { KnowledgePack } from "../state/knowledge-pack.js"
 import type { MeetingCharter } from "../state/meeting-charter.js"
+import { getOpenRouterChatCompletionsUrl, loadOpenRouterProviderConfig } from "../config/provider-config.js"
+import { DEFAULT_SEARCH_MODEL, getLayerSelection } from "../state/model-config.js"
+import { ModelConfigStore } from "../state/model-config-store.js"
+import * as path from "path"
 
-const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-const OPENROUTER_MODELS = (
-  process.env.OPENROUTER_BRIEF_MODELS ?? "arcee-ai/trinity-large-preview:free,stepfun/step-3.5-flash:free"
-).split(",")
+const CONFIG_DIR = path.join(process.cwd(), "config")
+const MODEL_CONFIG_STORE = new ModelConfigStore(CONFIG_DIR)
 
 const DEFAULT_SYSTEM_PROMPT = `You are a senior commercial analyst for a B2B marketing automation platform.
 
@@ -171,27 +173,34 @@ Assess this signal.`
     modelId: string
   }> {
     let lastError = ""
-    const apiKey = process.env.OPENROUTER_API_KEY
+    const providerConfig = loadOpenRouterProviderConfig()
+    const apiKey = providerConfig.apiKey
+    const modelConfig = MODEL_CONFIG_STORE.loadOrDefault(intentId)
+    const configuredSearchModel = getLayerSelection(modelConfig, "search")?.model
+    const configuredMeetingModel = getLayerSelection(modelConfig, "meeting")?.model
+    const models = [configuredSearchModel, configuredMeetingModel, providerConfig.defaultModel, DEFAULT_SEARCH_MODEL]
+      .filter((value): value is string => Boolean(value))
+      .filter((value, index, list) => list.indexOf(value) === index)
 
     if (!apiKey) {
       return {
         commercialRelevance: false,
         category: "noise",
-        reasoning: "LLM assessment unavailable: OPENROUTER_API_KEY is not set.",
+        reasoning: "LLM assessment unavailable: OpenRouter API key is not configured.",
         confidence: 0.1,
         opportunityScore: 0.0,
         verticalTags: [],
-        missingEvidence: ["OPENROUTER_API_KEY not configured"],
+        missingEvidence: ["OpenRouter API key not configured"],
         modelId: "fallback",
       }
     }
 
-    for (const model of OPENROUTER_MODELS) {
+    for (const model of models) {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 30000)
 
       try {
-        const response = await fetch(OPENROUTER_API_URL, {
+        const response = await fetch(getOpenRouterChatCompletionsUrl(providerConfig), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

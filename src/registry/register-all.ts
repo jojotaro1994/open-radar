@@ -14,6 +14,7 @@ import { ConfluenceAdapter } from '../adapters/confluence-adapter.js';
 import { GitHubDiscussionsAdapter } from '../adapters/github-discussions-adapter.js';
 import { SmarterHackerNewsAdapter } from '../adapters/hackernews-smart-adapter.js';
 import { RiplusInsuranceTravelMockAdapter } from '../adapters/riplus-insurance-travel-mock-adapter.js';
+import { MondayAdapter } from '../adapters/monday-adapter.js';
 
 function registerIfEnabled(id: string, factory: () => any, opts?: any): void {
   const catalogIds = getAllCatalogAdapterIds()
@@ -63,6 +64,12 @@ registerIfEnabled('hackernews', async () => new SmarterHackerNewsAdapter(), {
 registerIfEnabled('riplus-insurance-travel', async () => new RiplusInsuranceTravelMockAdapter(), {
   authType: 'none',
   rateLimit: undefined,
+})
+
+// Monday Adapter
+registerIfEnabled('monday', async () => new MondayAdapter(), {
+  authType: 'bearer',
+  rateLimit: 1000,
 })
 
 console.log('[SourceRegistry] Bootstrap complete — only catalog-enabled adapters are registered')

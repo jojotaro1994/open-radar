@@ -1,0 +1,13 @@
+{
+  "$schema": "../intents.schema.json",
+  "id": "default",
+  "name": "Generic Radar Intent",
+  "productContext": "Generic product — general-purpose demand signal radar. Capture feature requests, bug reports, workflow pain points, and general product feedback from all available sources.",
+  "commercialCriteria": {
+    "excludeTags": ["internal", "wontfix", "duplicate"],
+    "includeTags": [],
+    "minRelevanceScore": 0.3
+  },
+  "sourcePriority": [],
+  "scopeFilters": {}
+}

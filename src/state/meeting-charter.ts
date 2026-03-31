@@ -1,8 +1,10 @@
 /**
- * meeting-charter.ts — persistent: how the system discusses, frames judgment.
+ * Meeting Goal — persistent: how the BA Meeting Room frames judgment.
  *
- * Part of the five-object radar context model.
- * Meeting Charter is responsible for:
+ * Product model name: Meeting Goal
+ * Internal type name: MeetingCharter (for compatibility migration)
+ *
+ * Meeting Goal is responsible for:
  *   - the primary objective of radar reviews
  *   - which lens/judge angle to apply
  *   - required questions every signal must answer
@@ -10,8 +12,8 @@
  *   - decision style (conservative, balanced, aggressive)
  *   - meeting notes and framing guidance
  *
- * Meeting Charter is NOT the same as:
- *   - Search Context (how the system searches)
+ * Meeting Goal is NOT the same as:
+ *   - Scout Brief (how the system searches)
  *   - Knowledge Pack (what the system knows)
  *
  * Lifecycle: persistent. Written via the preview-first change flow.

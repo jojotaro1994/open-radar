@@ -1,7 +1,8 @@
 /**
- * knowledge-pack.ts — persistent: what the system knows about the business world.
+ * Knowledge Pack — persistent: what the system knows about the business world.
  *
- * Part of the five-object radar context model.
+ * Product model: Knowledge Pack
+ *
  * Knowledge Pack is responsible for:
  *   - RIPlus product capabilities and boundaries
  *   - known limitations and facts
@@ -10,8 +11,8 @@
  *   - support taxonomy
  *
  * Knowledge Pack is NOT the same as:
- *   - Search Context (how the system searches)
- *   - Meeting Charter (how the system discusses/judges)
+ *   - Scout Brief (how the system searches)
+ *   - Meeting Goal (how the system discusses/judges)
  *
  * Lifecycle: persistent. Written via the preview-first change flow.
  */
@@ -61,6 +62,16 @@ export interface KnowledgePack {
   /** Human-readable notes about this Knowledge Pack */
   knowledgeNotes: string
 
+  /**
+   * Status of this Knowledge Pack in the candidate/accepted lifecycle.
+   * - "candidate": produced by a Knowledge Run, not yet reviewed/accepted
+   * - "accepted": reviewed and confirmed as the active working knowledge for Radar Runs
+   *
+   * Only one accepted Knowledge Pack is active per intent at a time.
+   * Radar Run consumes the accepted Knowledge Pack by default.
+   */
+  status?: "candidate" | "accepted"
+
   createdAt: string
   updatedAt: string
 }
@@ -72,4 +83,5 @@ export interface KnowledgePackSummary {
   productCapabilities?: string[]
   knownLimitations?: string[]
   verticalContext?: string
+  status?: "candidate" | "accepted"
 }

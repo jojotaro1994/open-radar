@@ -1,20 +1,20 @@
 /**
- * search-context.ts — persistent: how the system searches.
+ * Scout Brief — persistent: how the Scout Organization searches.
  *
- * Part of the five-object radar context model.
- * Search Context is responsible for:
+ * Product model name: Scout Brief
+ * Internal type name: SearchContext (for compatibility migration)
+ *
+ * Scout Brief is responsible for:
  *   - which sources to weight / suppress
  *   - which topics to boost / suppress
  *   - recall bias and noise tolerance
  *   - search notes and prioritization
  *
- * Search Context is NOT the same as:
+ * Scout Brief is NOT the same as:
  *   - Knowledge Pack (what the system knows)
- *   - Meeting Charter (how the system discusses/judges)
+ *   - Meeting Goal (how the system discusses/judges)
  *
  * Lifecycle: persistent. Written via the preview-first change flow.
- * During transition, ActiveStrategy session overlay may still apply
- * as a subordinate compatibility layer.
  */
 
 export interface SourceWeight {

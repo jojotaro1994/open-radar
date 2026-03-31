@@ -19,6 +19,8 @@ import type { MeetingRecord } from "./meeting-record.js"
 import type { MeetingCharter } from "./meeting-charter.js"
 import type { KnowledgePack } from "./knowledge-pack.js"
 import type { CommercialAssessment } from "../schemas/commercial-assessment.js"
+import type { MeetingContextEnvelope } from "./context-envelopes.js"
+import { buildMeetingGuidance } from "./context-envelopes.js"
 
 type TriageDecision = "approved" | "rejected" | "deferred"
 
@@ -167,6 +169,7 @@ export function evaluateDecisionObjectWithMeetingRoom(
   assessments: Map<string, CommercialAssessment>,
   meetingCharter: MeetingCharter | undefined,
   knowledgePack: KnowledgePack | undefined,
+  meetingEnvelope?: MeetingContextEnvelope,
 ): MeetingRecord {
   const now = new Date().toISOString()
 
@@ -178,15 +181,49 @@ export function evaluateDecisionObjectWithMeetingRoom(
     }
   }
 
+  // Collect supporting evidence IDs from the finding bundle when meetingEnvelope is provided
+  const supportingEvidenceFromFindings: string[] = []
+  const evidenceGapsFromEvidence: string[] = []
+  if (meetingEnvelope?.findingBundle?.[decisionObjectId]) {
+    for (const f of meetingEnvelope.findingBundle[decisionObjectId]) {
+      supportingEvidenceFromFindings.push(`finding:${f.findingId}`)
+    }
+  }
+  if (meetingEnvelope?.evidenceBundle) {
+    for (const [, evList] of Object.entries(meetingEnvelope.evidenceBundle)) {
+      for (const ev of evList) {
+        evidenceGapsFromEvidence.push(`evidence:${ev.evidenceId}:${(ev.normalizedText ?? "").slice(0, 80)}`)
+      }
+    }
+  }
+
   const category = bestAssessment ? inferCategory(bestAssessment) : "general"
   const verticals = bestAssessment ? inferVerticals(bestAssessment) : []
   const impact = inferImpact(bestAssessment, meetingCharter?.decisionStyle)
   const fitLevel = bestAssessment ? inferFitLevel(bestAssessment) : "weak"
 
+  // When meetingEnvelope is available, derive the decisionObject from it for metrics guidance
+  const decisionObjectFromEnvelope = meetingEnvelope?.decisionObjects.find(
+    d => d.decisionObjectId === decisionObjectId,
+  )
+  const meetingGuidance = meetingEnvelope && meetingCharter && decisionObjectFromEnvelope
+    ? buildMeetingGuidance({
+        decisionStyle: meetingCharter.decisionStyle,
+        priorityBand: decisionObjectFromEnvelope.priorityBand,
+        metricsImpact: decisionObjectFromEnvelope.metricsImpact,
+      })
+    : null
+
   const opportunityLens: MeetingRecord["lenses"]["opportunity"] = {
     conclusion: bestAssessment?.reasoning ?? `DecisionObject ${decisionObjectId} evaluated by BA Meeting Room.`,
-    supportingEvidence: bestAssessment?.missingEvidence ?? [],
-    evidenceGaps: bestAssessment?.missingEvidence ?? [],
+    supportingEvidence: [
+      ...(bestAssessment?.missingEvidence ?? []),
+      ...supportingEvidenceFromFindings,
+    ],
+    evidenceGaps: [
+      ...(bestAssessment?.missingEvidence ?? []),
+      ...evidenceGapsFromEvidence,
+    ],
     category,
     verticals,
     commercialImpact: impact,
@@ -201,13 +238,42 @@ export function evaluateDecisionObjectWithMeetingRoom(
     riskFactors.push("Low confidence in commercial relevance assessment")
   }
   riskFactors.push(`DecisionObject-level evaluation: ${assessments.size} signal assessment(s) aggregated`)
+  if (meetingEnvelope) {
+    // Prior feedback — consumed to drive governance signals
+    const priorFeedback = meetingEnvelope.priorFeedback
+    if (priorFeedback && priorFeedback.length > 0) {
+      riskFactors.push(`Prior feedback: ${priorFeedback.length} prior feedback record(s) on this DecisionObject`)
+      const priorRejections = priorFeedback.filter(f => f.resolution === "reject")
+      if (priorRejections.length > 0) {
+        weaknesses.push(`Previously rejected (${priorRejections.length} prior rejection(s)) — review prior rationale carefully`)
+        riskFactors.push(`Prior rejection count: ${priorRejections.length} — escalating scrutiny`)
+      }
+      const feedbackClasses = priorFeedback.map(f => f.feedbackClass).filter(Boolean)
+      if (feedbackClasses.length > 0) {
+        riskFactors.push(`Prior feedback classes: ${[...new Set(feedbackClasses)].join(", ")}`)
+      }
+    }
+
+    // Reference facts — consumed as governance context (baseline truths for this topic)
+    const referenceFacts = meetingEnvelope.referenceFacts
+    if (referenceFacts && referenceFacts.length > 0) {
+      riskFactors.push(`Reference facts: ${referenceFacts.length} baseline fact(s) available for this topic`)
+    }
+
+    riskFactors.push("MeetingContextEnvelope fully consumed: findingBundle + evidenceBundle + priorFeedback + referenceFacts")
+  }
 
   const skepticLens: MeetingRecord["lenses"]["skeptic"] = {
     conclusion: weaknesses.length > 0
       ? `Evidence gaps identified: ${weaknesses.join("; ")}`
       : "No significant evidence gaps identified.",
     supportingEvidence: riskFactors,
-    evidenceGaps: bestAssessment?.missingEvidence ?? [],
+    evidenceGaps: [
+      ...(bestAssessment?.missingEvidence ?? []),
+      ...evidenceGapsFromEvidence,
+      // Surface reference fact titles as explicit evidence gaps the reviewer should reconcile
+      ...(meetingEnvelope?.referenceFacts?.map(rf => `ref:${rf.referenceFactId}:${rf.title}`) ?? []),
+    ],
     weaknesses,
     riskFactors,
   }
@@ -229,8 +295,9 @@ export function evaluateDecisionObjectWithMeetingRoom(
     ? `[DecisionObject ${decisionObjectId}] [${bestAssessment.category}] ${bestAssessment.reasoning}`
     : `Rule-based DecisionObject evaluation — no LLM assessment available.`
 
+  const guidanceNote = meetingGuidance ? ` | Guidance: ${meetingGuidance}` : ""
   const chairLens: MeetingRecord["lenses"]["chair"] = {
-    summary: `DecisionObject ${decisionObjectId} evaluated by BA Meeting Room. Category=${category}, impact=${impact}, fit=${fitLevel}, signals=${assessments.size}.`,
+    summary: `DecisionObject ${decisionObjectId} evaluated by BA Meeting Room. Category=${category}, impact=${impact}, fit=${fitLevel}, signals=${assessments.size}.${guidanceNote}`,
     finalDecision: "deferred", // DecisionObject-level governance always starts as deferred until human review
     decisionRationale,
   }

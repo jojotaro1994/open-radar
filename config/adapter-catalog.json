@@ -5,37 +5,50 @@
       "id": "jira-rr",
       "enabled": false,
       "module": "jira-rr-adapter",
-      "description": "Jira RR — Radica Requirements pool (context role)"
+      "description": "Jira RR — Radica Requirements pool (context role)",
+      "sourceType": "knowledge_source"
     },
     {
       "id": "jira-ma",
-      "enabled": false,
+      "enabled": true,
       "module": "jira-ma-adapter",
-      "description": "Jira MA — RIPlus main project (context role)"
+      "description": "Jira MA — primary project (context role)",
+      "sourceType": "dual_use"
     },
     {
       "id": "confluence",
-      "enabled": false,
+      "enabled": true,
       "module": "confluence-adapter",
-      "description": "Confluence — internal documentation (context role)"
+      "description": "Confluence — internal documentation (context role)",
+      "sourceType": "knowledge_source"
     },
     {
       "id": "github-discussions",
       "enabled": false,
       "module": "github-discussions-adapter",
-      "description": "GitHub Discussions — open-source signal (context role)"
+      "description": "GitHub Discussions — open-source signal (context role)",
+      "sourceType": "opportunity_source"
     },
     {
       "id": "hackernews",
       "enabled": true,
       "module": "hackernews-smart-adapter",
-      "description": "Hacker News — open web signal (direct_signal role)"
+      "description": "Hacker News — open web signal (direct_signal role)",
+      "sourceType": "opportunity_source"
     },
     {
       "id": "riplus-insurance-travel",
       "enabled": true,
       "module": "riplus-insurance-travel-mock-adapter",
-      "description": "RIPlus mock — insurance/travel direct signal (direct_signal role, test only)"
+      "description": "RIPlus mock — insurance/travel direct signal (direct_signal role, test only)",
+      "sourceType": "opportunity_source"
+    },
+    {
+      "id": "monday",
+      "enabled": true,
+      "module": "monday-adapter",
+      "description": "Monday.com — tasks, epics, and retrospectives (direct_signal role)",
+      "sourceType": "opportunity_source"
     }
   ]
 }

@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prototype Radar — MVP Viewer</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #242836;
+      --border: #2e3347;
+      --text: #e2e4f0;
+      --muted: #7a7f9a;
+      --accent: #7c6fcd;
+      --green: #3ecf8e;
+      --yellow: #f5a623;
+      --red: #ef4444;
+      --blue: #60a5fa;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.5; }
+
+    /* ── layout ─────────────────────────────────────────────────────────── */
+    .app { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
+    .header { margin-bottom: 28px; }
+    .header h1 { font-size: 20px; font-weight: 600; color: var(--text); }
+    .header p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .header .badge { display: inline-block; background: var(--accent); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 8px; vertical-align: middle; }
+
+    /* ── stats bar ───────────────────────────────────────────────────────── */
+    .stats-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 28px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; flex: 1; min-width: 100px; }
+    .stat-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-card .value { font-size: 24px; font-weight: 700; margin-top: 4px; }
+    .stat-card .value.green { color: var(--green); }
+    .stat-card .value.red { color: var(--red); }
+    .stat-card .value.yellow { color: var(--yellow); }
+    .stat-card .value.blue { color: var(--blue); }
+    .stat-card .value.accent { color: var(--accent); }
+
+    /* ── gate callout ───────────────────────────────────────────────────── */
+    .gate-callout { background: var(--surface); border: 1px solid var(--accent); border-left: 4px solid var(--accent); border-radius: 6px; padding: 12px 16px; margin-bottom: 24px; font-size: 13px; }
+    .gate-callout strong { color: var(--accent); }
+
+    /* ── sections ───────────────────────────────────────────────────────── */
+    .section { margin-bottom: 32px; }
+    .section-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+    /* ── queue ──────────────────────────────────────────────────────────── */
+    .queue-list { display: flex; flex-direction: column; gap: 6px; }
+    .queue-item { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; }
+    .queue-item .signal-id { font-family: 'Courier New', monospace; font-size: 12px; color: var(--blue); min-width: 200px; }
+    .queue-item .cat-tag { font-size: 11px; padding: 2px 7px; border-radius: 4px; background: var(--surface2); color: var(--muted); }
+    .queue-item .score { font-size: 12px; color: var(--muted); min-width: 50px; }
+    .queue-item .status-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+    .status-approved { background: rgba(62,207,142,0.15); color: var(--green); }
+    .status-rejected { background: rgba(239,68,68,0.15); color: var(--red); }
+    .status-deferred { background: rgba(245,166,35,0.15); color: var(--yellow); }
+    .status-pending { background: rgba(122,127,154,0.15); color: var(--muted); }
+    .queue-item .meta { margin-left: auto; font-size: 11px; color: var(--muted); }
+    .queue-item .reviewer { margin-left: 12px; font-size: 11px; color: var(--muted); }
+
+    /* ── pipeline viz ──────────────────────────────────────────────────── */
+    .pipeline-stage { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; }
+    .pipeline-stage h3 { font-size: 12px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+    .theme-row { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; margin-bottom: 8px; }
+    .theme-row .theme-title { font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+    .opp-row { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; margin-bottom: 8px; margin-left: 16px; }
+    .opp-row .opp-title { font-weight: 600; font-size: 13px; color: var(--blue); margin-bottom: 6px; }
+    .consumer-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-left: 16px; }
+    .consumer-chip { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
+    .consumer-chip.proto { border-color: var(--accent); color: var(--accent); }
+    .consumer-chip.video { border-color: var(--blue); color: var(--blue); }
+    .consumer-chip.jira { border-color: var(--green); color: var(--green); }
+
+    /* ── interaction round ──────────────────────────────────────────────── */
+    .round-container { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .discord-panel { background: #2d3441; border-right: 1px solid var(--border); width: 220px; padding: 16px; flex-shrink: 0; }
+    .discord-panel .channel-name { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+    .discord-panel .channel-name span { color: var(--text); font-weight: 600; }
+    .discord-msg { margin-bottom: 12px; }
+    .discord-msg .author { font-size: 11px; font-weight: 600; margin-bottom: 2px; }
+    .discord-msg .author.reviewer { color: #a8c5fb; }
+    .discord-msg .author.openclaw { color: var(--accent); }
+    .discord-msg .author.radar { color: var(--green); }
+    .discord-msg .bubble { background: var(--surface2); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: var(--text); line-height: 1.4; }
+    .openclaw-panel { flex: 1; padding: 16px; }
+    .openclaw-panel .panel-header { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+    .openclaw-msg { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; }
+    .openclaw-msg .msg-title { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+    .openclaw-msg .msg-body { font-size: 12px; color: var(--muted); }
+    .round-flex { display: flex; }
+    .round-missing { color: var(--muted); font-size: 12px; padding: 16px; }
+
+    /* ── artifact map ───────────────────────────────────────────────────── */
+    .artifact-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+    .artifact-item { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; }
+    .artifact-item .path { font-family: 'Courier New', monospace; font-size: 11px; color: var(--muted); }
+    .artifact-item .count { font-size: 13px; font-weight: 600; color: var(--text); }
+    .artifact-item .count.has-data { color: var(--green); }
+
+    /* ── footer ─────────────────────────────────────────────────────────── */
+    .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; }
+
+    /* ── empty state ───────────────────────────────────────────────────── */
+    .empty-state { background: var(--surface); border: 1px dashed var(--border); border-radius: 8px; padding: 32px; text-align: center; color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <h1>Prototype Radar <span class="badge">MVP Viewer</span></h1>
+    <p>Async demand signal radar system — data loaded from <code>data/</code></p>
+  </div>
+
+  <!-- Stats + Gate -->
+  <div class="gate-callout">
+    <strong>Single hard gate:</strong> Signal Triage is the only mandatory checkpoint. All signals advance through augmentation; only triage can stop them.
+    Queue status (<code>ReviewQueueItem.status</code>) is the authoritative source for triage decisions.
+  </div>
+
+  <div class="stats-bar" id="stats-bar">
+    <div class="stat-card"><div class="label">Total Signals</div><div class="value" id="stat-total">—</div></div>
+    <div class="stat-card"><div class="label">Approved</div><div class="value green" id="stat-approved">—</div></div>
+    <div class="stat-card"><div class="label">Rejected</div><div class="value red" id="stat-rejected">—</div></div>
+    <div class="stat-card"><div class="label">Deferred</div><div class="value yellow" id="stat-deferred">—</div></div>
+    <div class="stat-card"><div class="label">Themes</div><div class="value accent" id="stat-themes">—</div></div>
+    <div class="stat-card"><div class="label">Opportunities</div><div class="value blue" id="stat-opps">—</div></div>
+  </div>
+
+  <!-- Review Queue -->
+  <div class="section">
+    <div class="section-title">Review Queue — Triage Gate</div>
+    <div class="queue-list" id="queue-list">
+      <div class="empty-state" id="queue-empty">No signals in queue. Run the demo first.</div>
+    </div>
+  </div>
+
+  <!-- Pipeline: Themes → Opportunities → Consumers -->
+  <div class="section">
+    <div class="section-title">Theme Clustering → Opportunity Assembly → Consumers</div>
+    <div id="pipeline-stages">
+      <div class="empty-state" id="pipeline-empty">No themes assembled. Run the demo first.</div>
+    </div>
+  </div>
+
+  <!-- Interaction Round Simulation -->
+  <div class="section">
+    <div class="section-title">Interaction Round Simulation</div>
+    <div id="round-container">
+      <div class="empty-state" id="round-empty">Not enough triage data to simulate a round. Run the demo first.</div>
+    </div>
+  </div>
+
+  <!-- Artifact Storage Map -->
+  <div class="section">
+    <div class="section-title">Artifact Storage Map</div>
+    <div class="artifact-grid" id="artifact-grid"></div>
+  </div>
+
+  <div class="footer">
+    <span id="footer-cycle">Cycle: —</span>
+    <span id="footer-gen">Generated: —</span>
+  </div>
+</div>
+
+<script>
+const DATA_URL = '../data/dashboard-data.json';
+
+async function loadDashboard() {
+  try {
+    const res = await fetch(DATA_URL);
+    if (!res.ok) throw new Error('dashboard-data.json not found. Run: node dist/orchestrator/export-dashboard-data.js');
+    const data = await res.json();
+    renderAll(data);
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
+function showError(msg) {
+  document.querySelector('.stats-bar').innerHTML = `<div class="empty-state" style="grid-column:1/-1">${msg}</div>`;
+  document.getElementById('queue-list').innerHTML = '';
+  document.getElementById('pipeline-stages').innerHTML = '';
+  document.getElementById('round-container').innerHTML = '';
+}
+
+function renderAll(data) {
+  renderStats(data.stats);
+  renderQueue(data.queue);
+  renderPipeline(data.themes, data.opportunities, data.prototypeBriefs, data.videoBriefs, data.jiraDrafts);
+  renderInteractionRound(data.interactionRound);
+  renderArtifactMap(data.artifactMap, data.stats);
+  document.getElementById('footer-cycle').textContent = `Cycle: ${data.cycleId || '—'}`;
+  document.getElementById('footer-gen').textContent = `View data generated: ${new Date(data.generatedAt).toLocaleString()}`;
+}
+
+// ── Stats ───────────────────────────────────────────────────────────────────
+function renderStats(stats) {
+  document.getElementById('stat-total').textContent = stats.totalSignals;
+  document.getElementById('stat-approved').textContent = stats.approved;
+  document.getElementById('stat-rejected').textContent = stats.rejected;
+  document.getElementById('stat-deferred').textContent = stats.deferred;
+  document.getElementById('stat-themes').textContent = stats.themes;
+  document.getElementById('stat-opps').textContent = stats.opportunities;
+}
+
+// ── Queue ────────────────────────────────────────────────────────────────────
+function renderQueue(queue) {
+  const container = document.getElementById('queue-list');
+  if (!queue || queue.length === 0) {
+    container.innerHTML = '<div class="empty-state">No signals in queue.</div>';
+    return;
+  }
+  container.innerHTML = queue.map(item => {
+    const sig = item.scoredSignal || {};
+    const score = sig.relevanceScore != null ? sig.relevanceScore.toFixed(2) : '—';
+    const cat = sig.category || '—';
+    const dup = sig.isDuplicate ? ' [dup]' : '';
+    const reason = item.triage?.reason ? ` — "${item.triage.reason}"` : '';
+    return `
+      <div class="queue-item">
+        <span class="signal-id">${item.signalId}</span>
+        <span class="cat-tag">${cat}${dup}</span>
+        <span class="score">score ${score}</span>
+        <span class="status-badge status-${item.status}">${item.status}</span>
+        ${item.triage ? `<span class="reviewer">by ${item.triage.reviewedBy}</span>` : ''}
+        ${item.triage?.reason ? `<span class="meta">${reason}</span>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+// ── Pipeline ─────────────────────────────────────────────────────────────────
+function renderPipeline(themes, opps, protoBriefs, videoBriefs, jiraDrafts) {
+  const container = document.getElementById('pipeline-stages');
+  const themeList = Object.values(themes);
+  const oppList = Object.values(opps);
+  const pbList = Object.values(protoBriefs);
+  const vbList = Object.values(videoBriefs);
+  const jiraList = Object.values(jiraDrafts);
+
+  if (themeList.length === 0) {
+    container.innerHTML = '<div class="empty-state">No themes assembled.</div>';
+    return;
+  }
+
+  const stage1 = `
+    <div class="pipeline-stage">
+      <h3>LAYER 3: Async Triage + Opportunity Assembly</h3>
+      ${themeList.map(theme => {
+        const themeOpps = oppList.filter(o => o.themeCandidateId === theme.id);
+        return `
+          <div class="theme-row">
+            <div class="theme-title">Theme: ${theme.themeTitle || theme.id}</div>
+            ${themeOpps.map(opp => {
+              const pb = pbList.find(p => p.opportunityId === opp.id);
+              const vb = vbList.find(v => v.prototypeBriefId === (pb?.id));
+              const jira = jiraList.find(j => j.opportunityId === opp.id);
+              return `
+                <div class="opp-row">
+                  <div class="opp-title">${opp.title || opp.id}</div>
+                  <div class="consumer-chips">
+                    ${pb ? `<span class="consumer-chip proto">PrototypeBrief ${pb.id.slice(0,12)}…</span>` : ''}
+                    ${vb ? `<span class="consumer-chip video">VideoBrief ${vb.id.slice(0,12)}…</span>` : ''}
+                    ${jira ? `<span class="consumer-chip jira">JiraDraft ${jira.id.slice(0,12)}…</span>` : ''}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+
+  const stage2 = `
+    <div class="pipeline-stage">
+      <h3>LAYER 4: Downstream Consumers</h3>
+      <div class="consumer-chips">
+        ${pbList.length ? `<span class="consumer-chip proto">PrototypeBrief ×${pbList.length}</span>` : ''}
+        ${vbList.length ? `<span class="consumer-chip video">VideoBrief ×${vbList.length}</span>` : ''}
+        ${jiraList.length ? `<span class="consumer-chip jira">JiraDraft ×${jiraList.length}</span>` : ''}
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin-top:10px">All consumers are stubs in MVP. Output is deterministic JSON artifacts with placeholder content. No real LLM calls.</p>
+    </div>
+  `;
+
+  container.innerHTML = stage1 + stage2;
+}
+
+// ── Interaction Round ─────────────────────────────────────────────────────────
+function renderInteractionRound(round) {
+  const container = document.getElementById('round-container');
+  const { approvedSignal, deferredSignal, rejectedSignal, opportunities } = round;
+
+  const hasAny = approvedSignal || deferredSignal || rejectedSignal;
+  if (!hasAny) {
+    container.innerHTML = '<div class="empty-state">Not enough triage data to simulate a round.</div>';
+    return;
+  }
+
+  const messages = [];
+
+  // Discord message from OpenClaw (radar agent)
+  messages.push({ author: 'radar', role: 'RadarAgent', bubble: 'New signal detected. Requesting triage review.' });
+
+  if (approvedSignal) {
+    messages.push({ author: 'reviewer', role: 'Reviewer', bubble: `:white_check_mark: Approving signal ${approvedSignal.id}\n"${approvedSignal.title}" — score ${approvedSignal.relevanceScore?.toFixed(2)}` });
+    messages.push({ author: 'openclaw', role: 'OpenClaw', bubble: `Signal approved. Routing to theme clustering → opportunity assembly.` });
+  }
+
+  if (deferredSignal) {
+    messages.push({ author: 'reviewer', role: 'Reviewer', bubble: `:clock1: Deferring signal ${deferredSignal.id}\n"${deferredSignal.title}" — needs further review.` });
+    messages.push({ author: 'openclaw', role: 'OpenClaw', bubble: `Signal deferred. Will revisit in next cycle.` });
+  }
+
+  if (rejectedSignal) {
+    messages.push({ author: 'reviewer', role: 'Reviewer', bubble: `:x: Rejecting signal ${rejectedSignal.id}\n"${rejectedSignal.title}" — not relevant.` });
+    messages.push({ author: 'openclaw', role: 'OpenClaw', bubble: `Signal rejected. Not moving forward.` });
+  }
+
+  if (opportunities && opportunities.length > 0) {
+    messages.push({ author: 'radar', role: 'RadarAgent', bubble: `Opportunity assembled: "${opportunities[0].title}". Triggering PrototypeBrief + JiraDraft consumers.` });
+  }
+
+  const discordMsgs = messages.filter(m => m.author !== 'openclaw').map(m => `
+    <div class="discord-msg">
+      <div class="author ${m.author}">${m.role}</div>
+      <div class="bubble">${m.bubble.replace(/\n/g, '<br>')}</div>
+    </div>
+  `).join('');
+
+  const openclawMsgs = messages.filter(m => m.author === 'openclaw').map(m => `
+    <div class="openclaw-msg">
+      <div class="msg-title">${m.role}</div>
+      <div class="msg-body">${m.bubble.replace(/\n/g, '<br>')}</div>
+    </div>
+  `).join('');
+
+  container.innerHTML = `
+    <div class="round-container">
+      <div class="round-flex">
+        <div class="discord-panel">
+          <div class="channel-name"><span>#radar-signals</span> — Discord</div>
+          ${discordMsgs}
+        </div>
+        <div class="openclaw-panel">
+          <div class="panel-header">OpenClaw — /radar triage log</div>
+          ${openclawMsgs}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ── Artifact Map ─────────────────────────────────────────────────────────────
+function renderArtifactMap(map, stats) {
+  const container = document.getElementById('artifact-grid');
+  const entries = [
+    { label: 'Review Queue', path: map.reviewQueue, count: stats.totalSignals },
+    { label: 'Themes', path: map.themes, count: stats.themes },
+    { label: 'Opportunities', path: map.opportunities, count: stats.opportunities },
+    { label: 'Pain Cards', path: map.painCards, count: Object.keys(stats).length }, // placeholder
+    { label: 'Evidence', path: map.evidence, count: Object.keys(stats).length },
+    { label: 'Prototype Briefs', path: map.prototypeBriefs, count: stats.prototypeBriefs },
+    { label: 'Video Briefs', path: map.videoBriefs, count: stats.videoBriefs },
+    { label: 'Jira Drafts', path: map.jiraDrafts, count: stats.jiraDrafts },
+    { label: 'Digests', path: map.digests, count: stats.totalSignals > 0 ? 1 : 0 },
+  ];
+
+  container.innerHTML = entries.map(e => `
+    <div class="artifact-item">
+      <div>
+        <div style="font-size:12px;font-weight:600">${e.label}</div>
+        <div class="path">${e.path}</div>
+      </div>
+      <div class="count ${e.count > 0 ? 'has-data' : ''}">${e.count > 0 ? e.count : '—'}</div>
+    </div>
+  `).join('');
+}
+
+loadDashboard();
+</script>
+</body>
+</html>

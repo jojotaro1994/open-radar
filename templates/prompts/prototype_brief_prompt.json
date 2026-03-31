@@ -1,0 +1,13 @@
+{
+  "id": "prototype_brief_default",
+  "name": "Prototype Brief Generation Prompt",
+  "templateBody": "Based on the following opportunity:\n\nTitle: {{opportunity.title}}\nSummary: {{opportunity.summary}}\nProblem: {{painCard.painStatement}}\nAffected User: {{painCard.affectedPersona}}\nEvidence Count: {{painCard.frequency}}\n\nGenerate a structured PrototypeBrief with:\n- problemStatement: clear problem description\n- targetUser: who experiences this problem\n- proposedSolution: initial solution approach\n- keyFeatures: 3-5 key features to address\n- constraints: any known constraints\n\nOutput as JSON.",
+  "requiredVars": [
+    "opportunity.title",
+    "opportunity.summary",
+    "painCard.painStatement",
+    "painCard.affectedPersona",
+    "painCard.frequency"
+  ],
+  "outputFormat": "json"
+}

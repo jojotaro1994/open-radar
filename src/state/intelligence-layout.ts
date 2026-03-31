@@ -89,3 +89,70 @@ export function learningMemoryDir(dataDir: string): string {
 export function learningMemoryPath(dataDir: string, memoryId: string): string {
   return path.join(learningMemoryDir(dataDir), `${memoryId}.json`)
 }
+
+// ── Brief + Card runtime layout ───────────────────────────────────────────────
+
+export function runtimeDir(dataDir: string): string {
+  return path.join(dataDir, "runtime")
+}
+
+export function runtimeBriefDir(dataDir: string, kind: "scout" | "meeting"): string {
+  return path.join(runtimeDir(dataDir), "briefs", kind)
+}
+
+export function runtimeBriefPath(dataDir: string, kind: "scout" | "meeting", id: string): string {
+  return path.join(runtimeBriefDir(dataDir, kind), `${id}.json`)
+}
+
+export function runtimeCardDir(
+  dataDir: string,
+  bucket: "inbox" | "processed" | "archive",
+): string {
+  return path.join(runtimeDir(dataDir), "cards", bucket)
+}
+
+export function runtimeCardJsonPath(
+  dataDir: string,
+  bucket: "inbox" | "processed" | "archive",
+  id: string,
+): string {
+  return path.join(runtimeCardDir(dataDir, bucket), `${id}.json`)
+}
+
+export function runtimeCardMarkdownPath(
+  dataDir: string,
+  bucket: "inbox" | "processed" | "archive",
+  id: string,
+): string {
+  return path.join(runtimeCardDir(dataDir, bucket), `${id}.md`)
+}
+
+export function retrospectiveCandidateDir(dataDir: string): string {
+  return path.join(reviewDir(dataDir), "retrospective-candidates")
+}
+
+export function retrospectiveCandidatePath(dataDir: string, candidateId: string): string {
+  return path.join(retrospectiveCandidateDir(dataDir), `${candidateId}.json`)
+}
+
+// ── Staged knowledge + graph mapping review layout ──────────────────────────
+
+export function stagedKnowledgeDir(dataDir: string): string {
+  return path.join(runtimeDir(dataDir), "staged-knowledge")
+}
+
+export function stagedKnowledgeBundleDir(dataDir: string): string {
+  return path.join(stagedKnowledgeDir(dataDir), "bundles")
+}
+
+export function stagedKnowledgeBundlePath(dataDir: string, bundleId: string): string {
+  return path.join(stagedKnowledgeBundleDir(dataDir), `${bundleId}.json`)
+}
+
+export function graphMappingPlanDir(dataDir: string): string {
+  return path.join(runtimeDir(dataDir), "graph-mapping-plans")
+}
+
+export function graphMappingPlanPath(dataDir: string, planId: string): string {
+  return path.join(graphMappingPlanDir(dataDir), `${planId}.json`)
+}

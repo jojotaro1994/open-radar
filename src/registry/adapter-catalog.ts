@@ -17,6 +17,7 @@ export interface CatalogEntry {
   enabled: boolean
   module: string
   description?: string
+  sourceType?: "opportunity_source" | "knowledge_source" | "dual_use"
 }
 
 export interface AdapterCatalog {

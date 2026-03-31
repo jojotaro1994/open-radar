@@ -1,0 +1,12 @@
+{
+  "id": "default-meeting-goal",
+  "intentId": "default",
+  "objective": "Use evidence-backed judgment for: test",
+  "primaryLens": "opportunity",
+  "requiredQuestions": [],
+  "avoidOverweighting": [],
+  "decisionStyle": "balanced",
+  "meetingNotes": "test",
+  "createdAt": "2026-03-31T11:53:31.372Z",
+  "updatedAt": "2026-03-31T11:53:44.044Z"
+}

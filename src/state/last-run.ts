@@ -8,18 +8,26 @@
 import * as fs from "fs"
 import * as path from "path"
 import type { SearchContextSummary } from "./search-context.js"
+import type { KnowledgeBaseSummary } from "./knowledge-base.js"
 import type { KnowledgePackSummary } from "./knowledge-pack.js"
 import type { MeetingCharterSummary } from "./meeting-charter.js"
+import type { KnowledgeBriefSummary } from "./knowledge-brief.js"
+import type { SourceWorkflowType } from "../registry/source-taxonomy.js"
 
 export interface LastRunSourceStat {
   name: string
-  role: "direct_signal" | "context"
+  sourceType: SourceWorkflowType
+  legacyRole?: "direct_signal" | "context"
   signalCount: number
 }
+
+export type RunType = "radar" | "knowledge"
 
 export interface LastRunSummary {
   timestamp: string
   intentId: string
+  cycleId?: string
+  runType?: RunType
   sessionPatchCount: number
   sources: LastRunSourceStat[]
   pipeline: {
@@ -30,8 +38,10 @@ export interface LastRunSummary {
   }
   /** Full context snapshot for explainability — /why and /review use this */
   searchContext?: SearchContextSummary
+  knowledgeBase?: KnowledgeBaseSummary
   knowledgePack?: KnowledgePackSummary
   meetingCharter?: MeetingCharterSummary
+  knowledgeBrief?: KnowledgeBriefSummary
 }
 
 export class LastRunStore {

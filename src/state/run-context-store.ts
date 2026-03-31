@@ -4,7 +4,7 @@
  * File location: data/run-contexts/{cycleId}.json
  *
  * Captures what the radar "knew" at the time of a specific run:
- *   - Which SearchContext / KnowledgePack / MeetingCharter were active
+ *   - Which Scout Brief / Knowledge Brief / Knowledge Base / KnowledgePack / Meeting Goal were active
  *   - What the LastRun stats were
  *   - What intent was used
  *
@@ -18,16 +18,22 @@
 import * as fs from "fs"
 import * as path from "path"
 import type { SearchContextSummary } from "./search-context.js"
+import type { KnowledgeBaseSummary } from "./knowledge-base.js"
 import type { KnowledgePackSummary } from "./knowledge-pack.js"
 import type { MeetingCharterSummary } from "./meeting-charter.js"
+import type { KnowledgeBriefSummary } from "./knowledge-brief.js"
+import type { RunType } from "./last-run.js"
 
 export interface RunContext {
   cycleId: string
   timestamp: string
   intentId: string
+  runType: RunType
   searchContext: SearchContextSummary
+  knowledgeBase: KnowledgeBaseSummary
   knowledgePack: KnowledgePackSummary
   meetingCharter: MeetingCharterSummary
+  knowledgeBrief: KnowledgeBriefSummary
   pipelineStats: {
     ingested: number
     scored: number

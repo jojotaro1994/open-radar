@@ -1,0 +1,63 @@
+# Dependencies & build
+node_modules/
+dist/
+
+# Runtime data (all customer/session data)
+data/
+
+# Logs & system
+*.log
+.DS_Store
+.env
+*.zip
+*.tar.gz
+
+# Company-specific knowledge bases
+riplus-knowledge-base/
+riplus-knowledge-base_1/
+riplus-knowledge-base_2/
+
+# Workspace & editor state
+.openclaw/
+.claude/
+.codex-plugin/
+
+# Design docs (internal)
+openspec/
+
+# Test/scratch files
+test.txt
+cli-lifecycle-test.js
+fetch-braze-omnichat.js
+validate-gaps-fixed.js
+validate-sms-braze-complete.js
+validate-sms-braze-flow.js
+
+# Company-specific source files
+src/adapters/riplus-insurance-travel-mock-adapter.ts
+src/adapters/riplus-mock-source-adapter.ts
+src/adapters/jira-ma-adapter.ts
+src/adapters/jira-rr-adapter.ts
+src/adapters/monday-adapter.ts
+src/orchestrator/riplus-ma-runner.ts
+src/orchestrator/riplus-mock-runner.ts
+src/orchestrator/monday-tester.ts
+src/test-braze-reeval-prototype.ts
+src/test-monday-item.ts
+src/test-monday.ts
+src/test-riplus-pages.ts
+src/test-stitch.ts
+src/consumers/stitch-project.ts
+src/fix-screen5.ts
+src/generate-story-prototype.ts
+src/orchestrator/ma-domain-runner.ts
+tools/knowledge-capture/
+
+# Company-specific intent configs
+config/intents/riplus-ma.json
+config/intents/riplus-ma.knowledge-base.json
+config/intents/riplus-ma.knowledge-brief.json
+config/intents/riplus-ma.meeting-goal.json
+config/intents/riplus-ma.model-config.json
+config/intents/riplus-ma.scout-brief.json
+config/intents/riplus-ma.knowledge-pack.json

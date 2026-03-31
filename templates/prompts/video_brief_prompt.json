@@ -1,0 +1,12 @@
+{
+  "id": "video_brief_default",
+  "name": "Video Brief Generation Prompt",
+  "templateBody": "Based on the following PrototypeBrief:\n\nProblem: {{prototypeBrief.problemStatement}}\nTarget User: {{prototypeBrief.targetUser}}\nProposed Solution: {{prototypeBrief.proposedSolution}}\nKey Features: {{prototypeBrief.keyFeatures}}\n\nGenerate a VideoBrief with:\n- narrative: a compelling story arc\n- tone: appropriate tone for the audience\n- duration: estimated duration in seconds\n- audience: who this video is for\n- frames: array of frame descriptions (3-5 frames)\n\nOutput as JSON.",
+  "requiredVars": [
+    "prototypeBrief.problemStatement",
+    "prototypeBrief.targetUser",
+    "prototypeBrief.proposedSolution",
+    "prototypeBrief.keyFeatures"
+  ],
+  "outputFormat": "json"
+}

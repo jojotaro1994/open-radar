@@ -27,7 +27,7 @@ import { getSourceWorkflowType } from "../registry/source-taxonomy.js"
 import { generateScoutPlan } from "../state/scout-commander.js"
 import { ScoutPlanStore } from "../state/scout-plan-store.js"
 import { RunContextStore } from "../state/run-context-store.js"
-import { buildScoutContextEnvelope } from "../state/context-envelopes.js"
+import { buildScoutContextEnvelope, buildMeetingContextEnvelope } from "../state/context-envelopes.js"
 import { LearningMemoryStore } from "../state/learning-memory-store.js"
 import { summarizeSearchContext, summarizeKnowledgeBase } from "../state/context-summary.js"
 import { summarizeKnowledgePack } from "../state/context-summary.js"
@@ -38,9 +38,13 @@ import { evaluateWithMeetingRoom, evaluateDecisionObjectWithMeetingRoom } from "
 import { EvidenceStore } from "../state/evidence-store.js"
 import { FindingStore } from "../state/finding-store.js"
 import { DecisionObjectStore } from "../state/decision-object-store.js"
+import { ReferenceFactStore } from "../state/reference-fact-store.js"
+import { HumanReviewFeedbackStore } from "../state/human-review-feedback-store.js"
 import type { Evidence } from "../state/evidence.js"
 import type { Finding } from "../state/finding.js"
 import type { DecisionObject } from "../state/decision-object.js"
+import type { ReferenceFact } from "../state/reference-fact.js"
+import type { HumanReviewFeedback } from "../state/human-review-feedback.js"
 
 export interface PipelineOptions {
   intent: RadarIntent
@@ -429,6 +433,8 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
   const meetingRecordStore = new MeetingRecordStore(options.dataDir)
   const findingStore = new FindingStore(options.dataDir)
   const decisionObjectStore = new DecisionObjectStore(options.dataDir)
+  const referenceFactStore = new ReferenceFactStore(options.dataDir)
+  const humanReviewFeedbackStore = new HumanReviewFeedbackStore(options.dataDir)
   await reviewQueue.enqueueAll(qualifiedForTriage, cycleId)
 
   const pending = await reviewQueue.getPending()
@@ -694,12 +700,63 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineRes
       }
     }
     if (bundleAssessments.size > 0) {
+      // Build findingBundle from supportedByFindingIds
+      const findingsForDo = (decisionObject.supportedByFindingIds ?? [])
+        .map((fid: string) => findingStore.load(intelligenceTopic, fid))
+        .filter((f): f is Finding => f !== null)
+      const findingBundle: Record<string, Finding[]> = {
+        [decisionObject.decisionObjectId]: findingsForDo,
+      }
+
+      // Build evidenceBundle from findings' supportedByEvidenceIds
+      const evidenceBundle: Record<string, Evidence[]> = {}
+      for (const f of findingsForDo) {
+        const evList = (f.supportedByEvidenceIds ?? [])
+          .map((eid: string) => evidenceStore.load(intelligenceTopic, eid))
+          .filter((e): e is Evidence => e !== null)
+        if (evList.length > 0) {
+          evidenceBundle[f.findingId] = evList
+        }
+      }
+
+      // Build metricsContext from findings
+      const metricsContext: Record<string, { arr?: number; nrr?: number; ndr?: number; notes?: string[] }> = {}
+      if (decisionObject.metricsImpact?.context) {
+        metricsContext[decisionObject.decisionObjectId] = {
+          arr: decisionObject.metricsImpact.context.arr,
+          nrr: decisionObject.metricsImpact.context.nrr,
+          ndr: decisionObject.metricsImpact.context.ndr,
+          notes: decisionObject.metricsImpact.context.notes,
+        }
+      }
+
+      // Load prior feedback and reference facts for this decision object
+      const priorFeedback = humanReviewFeedbackStore.listByDecisionObject(decisionObject.decisionObjectId)
+      const referenceFactIds = referenceFactStore.list(intelligenceTopic)
+      const referenceFacts = referenceFactIds
+        .map((id: string) => referenceFactStore.load(intelligenceTopic, id))
+        .filter((f): f is ReferenceFact => f !== null)
+
+      // Build the MeetingContextEnvelope (consumed by evaluateDecisionObjectWithMeetingRoom)
+      const meetingEnvelope = buildMeetingContextEnvelope({
+        intentId: intent.id,
+        cycleId,
+        meetingCharter: options.meetingCharter ?? {} as any,
+        decisionObjects: [decisionObject],
+        findingBundle,
+        evidenceBundle,
+        referenceFacts,
+        metricsContext,
+        priorFeedback,
+      })
+
       const meetingRecord = evaluateDecisionObjectWithMeetingRoom(
         opp.id,
         cycleId,
         bundleAssessments,
         options.meetingCharter,
         options.knowledgePack,
+        meetingEnvelope,
       )
       meetingRecordStore.save(meetingRecord)
     }
